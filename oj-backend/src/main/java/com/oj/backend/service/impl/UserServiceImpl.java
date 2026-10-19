@@ -41,7 +41,7 @@ public class UserServiceImpl implements UserService {
         if (userCount >= 5) {
             throw new BusinessException("注册人数已达上限，如被邀请可通过邮箱：227604656@qq.com 联系管理员！");
         }
-        
+
         // 1. 查询用户名是否已被占用
         User existUser = findByUsername(username);
         if (existUser != null) {

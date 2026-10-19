@@ -251,8 +251,9 @@ const fetchHistorySubmissions = async () => {
   try {
     const data = await getSubmissionListApi({
       pageNum: 1,
-      pageSize: 20,
-      problemId: problemId
+      pageSize: 50,
+      problemId: problemId,
+      userId: userStore.userInfo?.id
     })
     historySubmissions.value = data.items
   } finally {
