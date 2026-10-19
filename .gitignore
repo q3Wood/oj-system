@@ -1,0 +1,30 @@
+# === IDE 与 系统垃圾 ===
+.idea/
+.vscode/
+*.iml
+*.swp
+*~
+.DS_Store
+
+# === C++ 评测机构建产物 ===
+core-judge/build/
+core-judge/bin/
+*.o
+*.obj
+core-judge/var/workspace/*
+!core-judge/var/workspace/.gitkeep
+
+# === Java 后端构建产物 ===
+oj-backend/target/
+oj-backend/*.jar
+oj-backend/.mvn/wrapper/maven-wrapper.jar
+
+# === Vue 前端依赖与打包产物 (极其重要) ===
+oj-frontend/node_modules/
+oj-frontend/dist/
+oj-frontend/.vite/
+*.local
+
+# === 日志与测试临时文件 ===
+*.log
+/tmp/*

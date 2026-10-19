@@ -1,0 +1,18 @@
+docker run --rm --net=none core-judge-image \
+  --prob-dir /app/data/problems/1002 \
+  --src /app/tests/fixtures/my_ac_solution.cpp
+
+docker rmi -f core-judge-image      # 删除镜像
+
+
+./build/core-judge --prob-dir data/problems/1002 --src tests/fixtures/my_ac_solution.cpp --time 1000
+
+
+
+
+./build/core-judge --prob-dir data/problems/1002 --src tests/fixtures/case_ole.cpp --time 1000
+
+
+
+
+
