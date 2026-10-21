@@ -4,7 +4,7 @@ import router from '../router/index'
 import { useUserStore } from '../stores/user'
 
 const service = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 10000
 })
 
