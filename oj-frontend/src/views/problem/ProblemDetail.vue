@@ -15,7 +15,7 @@
 
               <!-- 2. 主标题与限制标签 -->
               <div class="title-row">
-                <h2 class="problem-title">#{{ problem?.id }} {{ problem?.title }}</h2>
+                <h2 class="problem-title">{{ problem?.id }} {{ problem?.title }}</h2>
                 <div class="tag-wrap">
                   <el-tag type="info" size="small">{{ problem?.timeLimitMs }} ms</el-tag>
                   <el-tag type="warning" size="small">{{ problem?.memoryLimitMb }} MB</el-tag>
@@ -150,6 +150,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Loading, Check, Close, Refresh, VideoPlay, Back } from '@element-plus/icons-vue'
 import { marked } from 'marked'
+import markedKatex from 'marked-katex-extension'
+import 'katex/dist/katex.min.css'
 
 // 组件引入 (保持你的相对路径)
 import MonacoEditor from '../../components/MonacoEditor.vue'
@@ -373,6 +375,12 @@ const getVerdictTagType = (verdict: string) => {
 //   return JSON.stringify(raw, null, 2)
 // }
 
+marked.use(
+  markedKatex({
+    throwOnError: false,
+    errorColor: '#cc0000'
+  })
+)
 onMounted(() => {
   fetchProblemDetail()
 })
