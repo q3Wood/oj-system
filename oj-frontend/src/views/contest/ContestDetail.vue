@@ -142,7 +142,7 @@
         <div v-show="activeTab === 'ranklist'" class="ranklist-section">
           <div class="rank-tools">
             <span class="tip">榜单严格按 ICPC 赛制计算：AC 题数优先，同题数按总罚时升序排序 (错题罚时 20 分钟)</span>
-            <el-button size="small" icon="Refresh" @click="fetchRanklist">刷新实时榜单</el-button>
+            <el-button size="small" :icon="Refresh" @click="fetchRanklist">刷新实时榜单</el-button>
           </div>
 
           <el-table :data="ranklist" border stripe style="width: 100%">

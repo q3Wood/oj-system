@@ -35,12 +35,12 @@
           <el-option label="C (gcc)" value="c" />
         </el-select>
 
-        <el-button size="small" icon="Refresh" style="margin-right: 12px;" @click="resetCodeTemplate">
+        <el-button size="small" :icon="Refresh" style="margin-right: 12px;" @click="resetCodeTemplate">
           重置模板
         </el-button>
 
         <!-- 牛客同款：我的提交记录抽屉入口 -->
-        <el-button size="small" icon="Tickets" style="margin-right: 12px;" @click="openMySubmissionsDrawer">
+        <el-button size="small" :icon="Tickets" style="margin-right: 12px;" @click="openMySubmissionsDrawer">
           我的提交
         </el-button>
 
@@ -48,7 +48,7 @@
         <el-button 
           type="success" 
           size="small" 
-          icon="VideoPlay" 
+          :icon="VideoPlay" 
           :loading="submitting" 
           @click="handleSubmit"
         >
@@ -139,10 +139,10 @@
           </div>
         </div>
         <div class="card-right">
-          <el-button v-if="!isEvaluating" link type="primary" size="small" @click="openReportDialog(latestSubmission)">
+          <el-button v-if="!isEvaluating" link :icon="VideoPlay" type="primary" size="small" @click="openReportDialog(latestSubmission)">
             查看报告
           </el-button>
-          <el-button link icon="Close" @click="floatingCardVisible = false"></el-button>
+          <el-button link :icon="Close" @click="floatingCardVisible = false"></el-button>
         </div>
       </div>
     </transition>
@@ -170,7 +170,7 @@ import {
 } from '../../api/contest'
 import { getSubmissionListApi, getSubmissionDetailApi } from '../../api/submission'
 import { useUserStore } from '../../stores/user'
-import type { ContestProblem, Submission, CaseDetail } from '../../types'
+import type { ContestProblem, Submission } from '../../types'
 import SubmissionDetailModal from '../../components/SubmissionDetailModal.vue'
 
 const route = useRoute()
@@ -195,7 +195,7 @@ const floatingCardVisible = ref(false)
 const isEvaluating = ref(false)
 const latestSubmission = ref<Submission | null>(null)
 const reportDialogVisible = ref(false)
-const selectedReport = ref<Submission | null>(null)
+// const selectedReport = ref<Submission | null>(null)
 
 // 抽屉与提交记录
 const drawerVisible = ref(false)
@@ -214,19 +214,19 @@ const openReportDialog = (sub: Submission | null) => {
   reportDialogVisible.value = true
 }
 
-const parsedDetails = computed<CaseDetail[]>(() => {
-  if (!selectedReport.value?.judgeDetails) return []
-  const d = selectedReport.value.judgeDetails
-  if (typeof d === 'string') {
-    try {
-      const p = JSON.parse(d)
-      return Array.isArray(p) ? p : []
-    } catch {
-      return []
-    }
-  }
-  return Array.isArray(d) ? d : []
-})
+// const parsedDetails = computed<CaseDetail[]>(() => {
+//   if (!selectedReport.value?.judgeDetails) return []
+//   const d = selectedReport.value.judgeDetails
+//   if (typeof d === 'string') {
+//     try {
+//       const p = JSON.parse(d)
+//       return Array.isArray(p) ? p : []
+//     } catch {
+//       return []
+//     }
+//   }
+//   return Array.isArray(d) ? d : []
+// })
 
 // 获取单题详情
 const fetchProblemDetail = async () => {
@@ -353,11 +353,11 @@ const getFloatingCardClass = () => {
   return 'card-failed'
 }
 
-const getVerdictClass = (v: string) => {
-  if (v === 'Accepted') return 'banner-ac'
-  if (v === 'Compile Error') return 'banner-ce'
-  return 'banner-wa'
-}
+// const getVerdictClass = (v: string) => {
+//   if (v === 'Accepted') return 'banner-ac'
+//   if (v === 'Compile Error') return 'banner-ce'
+//   return 'banner-wa'
+// }
 
 const getVerdictTagType = (v: string) => {
   if (v === 'Accepted') return 'success'
@@ -365,19 +365,19 @@ const getVerdictTagType = (v: string) => {
   return 'danger'
 }
 
-const getErrorMessage = (sub: Submission | null) => {
-  if (!sub || !sub.judgeDetails) return '无报错日志'
-  let raw = sub.judgeDetails
-  if (typeof raw === 'string') {
-    try {
-      const p = JSON.parse(raw)
-      return typeof p === 'string' ? p : JSON.stringify(p, null, 2)
-    } catch {
-      return raw
-    }
-  }
-  return JSON.stringify(raw, null, 2)
-}
+// const getErrorMessage = (sub: Submission | null) => {
+//   if (!sub || !sub.judgeDetails) return '无报错日志'
+//   let raw = sub.judgeDetails
+//   if (typeof raw === 'string') {
+//     try {
+//       const p = JSON.parse(raw)
+//       return typeof p === 'string' ? p : JSON.stringify(p, null, 2)
+//     } catch {
+//       return raw
+//     }
+//   }
+//   return JSON.stringify(raw, null, 2)
+// }
 
 watch(() => route.params.displayId, (newId) => {
   if (newId) {

@@ -44,7 +44,7 @@
         </div>
 
         <div class="header-right">
-          <el-button link icon="Back" style="margin-right: 18px;" @click="$router.push('/')">
+          <el-button link :icon="Back" style="margin-right: 18px;" @click="$router.push('/')">
             返回前台大厅
           </el-button>
           <span class="admin-badge">

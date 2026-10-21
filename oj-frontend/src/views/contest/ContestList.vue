@@ -71,7 +71,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getContestListApi } from '../../api/contest'
-import type { Contest, PageResult } from '../../types'
+import type { Contest } from '../../types'
 
 const loading = ref(false)
 const contestList = ref<Contest[]>([])

@@ -91,7 +91,7 @@ const formRules = reactive<FormRules>({
   ],
   confirmPassword: [
     {
-      validator: (rule: any, value: string, callback: any) => {
+      validator: (_rule: any, value: string, callback: any) => {
         if (isRegister.value && value !== formData.password) {
           callback(new Error('两次输入的密码不一致！'))
         } else {

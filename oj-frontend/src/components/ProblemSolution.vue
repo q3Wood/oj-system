@@ -34,13 +34,13 @@
     <div v-else class="solution-detail-view" v-loading="detailLoading">
 <div class="solution-read-header">
      <div class="read-top-bar">
-       <el-link :underline="false" icon="Back" @click="currentSolution = null">
+       <el-link :underline="false" :icon="Back" @click="currentSolution = null">
          返回题解列表
        </el-link>
        <!-- 仅作者本人或 ADMIN 允许编辑与删除 -->
        <div v-if="canManage(currentSolution)" class="manage-btn-group">
-         <el-button size="small" icon="Edit" @click="handleEditSolution">编辑</el-button>
-         <el-button size="small" type="danger" icon="Delete" @click="handleDeleteSolution">删除</el-button>
+         <el-button size="small" :icon="Edit" @click="handleEditSolution">编辑</el-button>
+         <el-button size="small" type="danger" :icon="Delete" @click="handleDeleteSolution">删除</el-button>
        </div>
      </div>
      <h3 class="read-title">{{ currentSolution.title }}</h3>
