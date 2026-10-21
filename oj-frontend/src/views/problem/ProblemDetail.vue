@@ -8,7 +8,7 @@
             <div class="problem-meta-header">
               <!-- 1. 顶部面包屑返回栏 -->
               <div class="breadcrumb-bar">
-                <el-link :underline="false" icon="Back" @click="$router.push('/problems')">
+                <el-link :underline="false" :icon="Back" @click="$router.push('/problems')">
                   返回题库列表
                 </el-link>
               </div>
@@ -84,11 +84,11 @@
                 </el-select>
               </div>
               <div class="action-buttons">
-                <el-button size="small" icon="Refresh" @click="resetCodeTemplate">重置模板</el-button>
+                <el-button size="small" :icon="Refresh" @click="resetCodeTemplate">重置模板</el-button>
                 <el-button 
                   type="success" 
                   size="small" 
-                  icon="VideoPlay" 
+                  :icon="VideoPlay" 
                   :loading="submitting" 
                   @click="handleSubmitCode"
                 >
@@ -161,7 +161,8 @@ import SubmissionDetailModal from '../../components/SubmissionDetailModal.vue'
 import { getProblemDetailApi } from '../../api/problem'
 import { submitCodeApi, getSubmissionListApi, getSubmissionDetailApi } from '../../api/submission'
 import { useUserStore } from '../../stores/user'
-import type { Problem, Submission, CaseDetail } from '../../types/index'
+// import type { Problem, Submission, CaseDetail } from '../../types/index'
+import type { Problem, Submission } from '../../types/index'
 
 const route = useRoute()
 const router = useRouter()
@@ -178,7 +179,7 @@ const floatingCardVisible = ref(false)
 const isEvaluating = ref(false)
 const latestSubmission = ref<Submission | null>(null)
 const reportDialogVisible = ref(false)
-const selectedReport = ref<Submission | null>(null)
+// const selectedReport = ref<Submission | null>(null)
 
 // 语言与代码
 const selectedLanguage = ref('cpp')
@@ -209,19 +210,19 @@ const renderedDescription = computed(() => {
 })
 
 // 解析弹窗里的测试点 JSON
-const parsedDetails = computed<CaseDetail[]>(() => {
-  if (!selectedReport.value?.judgeDetails) return []
-  const details = selectedReport.value.judgeDetails
-  if (typeof details === 'string') {
-    try {
-      const parsed = JSON.parse(details)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return Array.isArray(details) ? details : []
-})
+// const parsedDetails = computed<CaseDetail[]>(() => {
+//   if (!selectedReport.value?.judgeDetails) return []
+//   const details = selectedReport.value.judgeDetails
+//   if (typeof details === 'string') {
+//     try {
+//       const parsed = JSON.parse(details)
+//       return Array.isArray(parsed) ? parsed : []
+//     } catch {
+//       return []
+//     }
+//   }
+//   return Array.isArray(details) ? details : []
+// })
 
 // 获取题目详情
 const fetchProblemDetail = async () => {

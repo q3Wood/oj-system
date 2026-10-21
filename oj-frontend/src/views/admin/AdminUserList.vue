@@ -13,8 +13,8 @@
             @clear="handleSearch"
             @keyup.enter="handleSearch"
           />
-          <el-button type="primary" icon="Search" @click="handleSearch">搜索</el-button>
-          <el-button icon="Refresh" @click="handleReset">重置</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
         </div>
 
         <div class="tip-text">
@@ -121,7 +121,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getAdminUserListApi, updateUserRoleApi } from '../../api/user'
 import { useUserStore } from '../../stores/user'
-import type { User, PageResult } from '../../types'
+import type { User } from '../../types'
 
 const userStore = useUserStore()
 const loading = ref(false)

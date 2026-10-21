@@ -85,7 +85,7 @@ const router = createRouter({
 })
 
 // ================= 【核心安全防线】：全局前置权限路由守卫 =================
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   // 如果进入的是需要管理员权限的路径
   if (to.matched.some(record => record.meta.requiresAdmin)) {
     const userStore = useUserStore()

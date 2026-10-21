@@ -13,11 +13,11 @@
             @clear="handleSearch"
             @keyup.enter="handleSearch"
           />
-          <el-button type="primary" icon="Search" @click="handleSearch">搜索</el-button>
-          <el-button icon="Refresh" @click="handleReset">重置</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
         </div>
 
-        <el-button type="success" icon="Plus" @click="openCreateModal">
+        <el-button type="success" :icon="Plus" @click="openCreateModal">
           发布新比赛
         </el-button>
       </div>
@@ -63,7 +63,7 @@
         <!-- 操作栏 -->
         <el-table-column label="操作" width="260" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" icon="Edit" @click="openEditModal(row)">
+            <el-button link type="primary" size="small" :icon="Edit" @click="openEditModal(row)">
               编辑
             </el-button>
 
@@ -72,14 +72,14 @@
               link 
               type="success" 
               size="small" 
-              icon="Unlock"
+              :icon="Unlock"
               :disabled="row.isAllPublic"
               @click="handlePublishProblems(row)"
             >
               {{ row.isAllPublic ? '题目已公开' : '一键公开题目' }}
             </el-button>
 
-            <el-button link type="danger" size="small" icon="Delete" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" :icon="Delete" @click="handleDelete(row)">
               删除
             </el-button>
           </template>
@@ -164,7 +164,7 @@
 
             <el-button 
               type="danger" 
-              icon="Delete" 
+              :icon="Delete" 
               circle 
               plain
               size="small"

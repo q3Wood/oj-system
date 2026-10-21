@@ -45,8 +45,8 @@
           </el-select>
         </div>
 
-        <el-button type="primary" icon="Search" @click="handleSearch">筛选</el-button>
-        <el-button icon="Refresh" @click="handleReset">重置</el-button>
+        <el-button type="primary" :icon="Search" @click="handleSearch">筛选</el-button>
+        <el-button :icon="Refresh" @click="handleReset">重置</el-button>
       </div>
 
       <!-- 提交记录表格 -->
@@ -143,7 +143,7 @@
 import { ref, onMounted } from 'vue'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getSubmissionListApi } from '../../api/submission'
-import type { Submission, PageResult } from '../../types'
+import type { Submission } from '../../types'
 import SubmissionDetailModal from '../../components/SubmissionDetailModal.vue'
 
 const loading = ref(false)

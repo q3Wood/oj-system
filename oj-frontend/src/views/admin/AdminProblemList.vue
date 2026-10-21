@@ -28,11 +28,11 @@
             <el-option label="仅看比赛保密题" :value="0" />
           </el-select>
 
-          <el-button type="primary" icon="Search" @click="handleSearch">搜索</el-button>
-          <el-button icon="Refresh" @click="handleReset">重置</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
         </div>
 
-        <el-button type="success" icon="Plus" @click="openCreateModal">
+        <el-button type="success" :icon="Plus" @click="openCreateModal">
           发布新题目 (带用例)
         </el-button>
       </div>
@@ -81,7 +81,7 @@
 
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" icon="Edit" @click="openEditModal(row.id)">
+            <el-button link type="primary" size="small" :icon="Edit" @click="openEditModal(row.id)">
               编辑
             </el-button>
           </template>
@@ -114,7 +114,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Plus, Edit } from '@element-plus/icons-vue'
 import { getProblemListApi, updateProblemApi } from '../../api/problem'
-import type { Problem, PageResult } from '../../types'
+import type { Problem } from '../../types'
 import ProblemEditModal from '../../components/ProblemEditModal.vue' // 引入通用模态框
 
 const loading = ref(false)
