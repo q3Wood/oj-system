@@ -28,11 +28,11 @@ const routes: RouteRecordRaw[] = [
     name: 'Submissions',
     component: () => import('../views/submission/Submissions.vue')
   },
-  {
-    path: '/admin/problem/create',
-    name: 'AdminProblemCreate',
-    component: () => import('../views/problem/AdminProblemCreate.vue')
-  },
+  // {
+  //   path: '/admin/problem/create',
+  //   name: 'AdminProblemCreate',
+  //   component: () => import('../views/problem/AdminProblemCreate.vue')
+  // },
   {
     path: '/contests',
     name: 'Contests',

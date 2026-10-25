@@ -5,9 +5,9 @@
       <div class="toolbar">
         <div class="search-box">
           <el-input
-            v-model="keyword"
+            v-model.trim="keyword"
             placeholder="按比赛标题搜索..."
-            prefix-icon="Search"
+            :prefix-icon="Search"
             clearable
             style="width: 260px;"
             @clear="handleSearch"
@@ -50,13 +50,13 @@
 
         <el-table-column prop="problemCount" label="包含题数" width="90" align="center">
           <template #default="{ row }">
-            <el-tag type="info" size="small">{{ row.problemCount }} 题</el-tag>
+            <el-tag type="info" size="small">{{ row.problemCount ?? 0 }} 题</el-tag>
           </template>
         </el-table-column>
 
         <el-table-column prop="registeredCount" label="报名人数" width="90" align="center">
           <template #default="{ row }">
-            <b style="color: #409eff;">{{ row.registeredCount }} 人</b>
+            <b style="color: #409eff;">{{ row.registeredCount ?? 0 }} 人</b>
           </template>
         </el-table-column>
 
@@ -68,10 +68,10 @@
             </el-button>
 
             <!-- 赛后一键公开题目 -->
-            <el-button 
-              link 
-              type="success" 
-              size="small" 
+            <el-button
+              link
+              type="success"
+              size="small"
               :icon="Unlock"
               :disabled="row.isAllPublic"
               @click="handlePublishProblems(row)"
@@ -91,23 +91,26 @@
         <el-pagination
           v-model:current-page="pageNum"
           v-model:page-size="pageSize"
-          layout="total, prev, pager, next"
+          :page-sizes="[10, 20, 50]"
+          background
+          layout="total, sizes, prev, pager, next"
           :total="total"
+          @size-change="handleSearch"
           @current-change="fetchContests"
         />
       </div>
     </el-card>
 
     <!-- 创建 / 编辑比赛通用模态框 -->
-    <el-dialog 
-      v-model="modalVisible" 
-      :title="isEdit ? '编辑比赛规程与题目' : '创建新比赛 (发布公告)'" 
-      width="780px" 
+    <el-dialog
+      v-model="modalVisible"
+      :title="isEdit ? '编辑比赛规程与题目' : '创建新比赛 (自动发布置顶公告)'"
+      width="780px"
       destroy-on-close
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" v-loading="modalLoading">
         <el-form-item label="比赛标题" prop="title">
-          <el-input v-model="form.title" placeholder="例如: 2026 第一届 Core OJ 新星对抗赛" />
+          <el-input v-model.trim="form.title" placeholder="例如: 2026 第一届 Core OJ 新星对抗赛" />
         </el-form-item>
 
         <el-row :gutter="20">
@@ -119,7 +122,7 @@
                 value-format="YYYY-MM-DD HH:mm:ss"
                 placeholder="选择开赛时间"
                 style="width: 100%"
-                :disabled="isEdit && currentEditingStatus === 'RUNNING'"
+                :disabled="isEdit && currentEditingStatus !== 'NOT_STARTED'"
               />
             </el-form-item>
           </el-col>
@@ -131,6 +134,7 @@
                 value-format="YYYY-MM-DD HH:mm:ss"
                 placeholder="选择结赛时间"
                 style="width: 100%"
+                :disabled="isEdit && currentEditingStatus === 'ENDED'"
               />
             </el-form-item>
           </el-col>
@@ -141,45 +145,52 @@
         </el-form-item>
 
         <!-- 比赛题目挑选与 A/B/C 自动排序配置 -->
-        <el-form-item label="比赛题目配置 (系统自动按添加顺序编号为 A, B, C...)">
+        <el-form-item label="比赛题目配置 (系统自动按添加顺序编号为 A, B, C... 仅未开赛时允许修改题目)">
           <div v-for="(pItem, idx) in form.problems" :key="idx" class="problem-pick-row">
             <span class="auto-letter">{{ String.fromCharCode(65 + idx) }} 题</span>
-            
-            <el-select 
-              v-model="pItem.problemId" 
-              placeholder="从题库中挑选题目" 
-              filterable 
+
+            <el-select
+              v-model="pItem.problemId"
+              placeholder="从题库中挑选题目"
+              filterable
               style="width: 280px;"
+              :disabled="isEdit && currentEditingStatus !== 'NOT_STARTED'"
               @change="(val: any) => onProblemSelect(val, pItem)"
             >
-              <el-option 
-                v-for="p in allProblemOptions" 
-                :key="p.id" 
-                :label="`#${p.id} ${p.title} (${p.isPublic === 1 ? '公开' : '保密'})`" 
-                :value="p.id" 
+              <el-option
+                v-for="p in allProblemOptions"
+                :key="p.id"
+                :label="`#${p.id} ${p.title} (${p.isPublic === 1 ? '公开' : '保密'})`"
+                :value="p.id"
+                :disabled="isProblemAlreadySelected(p.id, idx)"
               />
             </el-select>
 
-            <el-input v-model="pItem.displayTitle" placeholder="比赛内展示标题" style="flex: 1;" />
+            <el-input
+              v-model.trim="pItem.displayTitle"
+              placeholder="比赛内展示标题"
+              style="flex: 1;"
+              :disabled="isEdit && currentEditingStatus !== 'NOT_STARTED'"
+            />
 
-            <el-button 
-              type="danger" 
-              :icon="Delete" 
-              circle 
+            <el-button
+              type="danger"
+              :icon="Delete"
+              circle
               plain
               size="small"
-              :disabled="isEdit && currentEditingStatus === 'RUNNING'"
-              @click="removeProblemItem(idx)" 
+              :disabled="isEdit && currentEditingStatus !== 'NOT_STARTED'"
+              @click="removeProblemItem(idx)"
             />
           </div>
 
-          <el-button 
-            type="primary" 
-            plain 
-            icon="Plus" 
-            size="small" 
+          <el-button
+            type="primary"
+            plain
+            :icon="Plus"
+            size="small"
             style="margin-top: 8px;"
-            :disabled="isEdit && currentEditingStatus === 'RUNNING'"
+            :disabled="isEdit && currentEditingStatus !== 'NOT_STARTED'"
             @click="addProblemItem"
           >
             添加比赛题目
@@ -199,10 +210,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Refresh, Plus, Edit, Delete, Unlock } from '@element-plus/icons-vue'
 import {
-  getAdminContestListApi,
+  getContestListApi,
   getContestDetailApi,
   getContestProblemsApi,
   createContestApi,
@@ -211,10 +222,10 @@ import {
   publishContestProblemsApi
 } from '../../api/contest'
 import { getProblemListApi } from '../../api/problem'
-import type { Problem } from '../../types'
+import type { Contest, Problem } from '../../types'
 
 const loading = ref(false)
-const contestList = ref<any[]>([])
+const contestList = ref<Contest[]>([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
@@ -222,23 +233,24 @@ const keyword = ref('')
 
 // 模态框相关
 const modalVisible = ref(false)
+const modalLoading = ref(false)
 const submitting = ref(false)
 const isEdit = ref(false)
 const editingId = ref<number | null>(null)
 const currentEditingStatus = ref<string>('')
-const formRef = ref()
+const formRef = ref<FormInstance>()
 
-// 题库备选池 (用于下拉选择题目)
 const allProblemOptions = ref<Problem[]>([])
+
+const defaultContestDesc =
+  '### 比赛规则\n1. 采用标准 **ACM/ICPC** 赛制；\n2. 最终排名首先按解题数降序排序，相同者按总罚时升序排序；\n3. 严禁作弊与代码雷同！'
 
 const form = reactive({
   title: '',
-  description: '### 比赛规则\n1. 采用标准 **ACM/ICPC** 赛制；\n2. 最终排名首先按解题数排序，相同者按总罚时升序排序；\n3. 严禁作弊与代码雷同！',
+  description: defaultContestDesc,
   startTime: '',
   endTime: '',
-  problems: [
-    { problemId: null as any, displayTitle: '' }
-  ]
+  problems: [{ problemId: null as number | null, displayTitle: '' }]
 })
 
 const rules = {
@@ -248,23 +260,22 @@ const rules = {
   description: [{ required: true, message: '说明规程不能为空', trigger: 'blur' }]
 }
 
-// 获取后台比赛列表
 const fetchContests = async () => {
   loading.value = true
   try {
-    const data = await getAdminContestListApi({
+    const data = await getContestListApi({
       pageNum: pageNum.value,
       pageSize: pageSize.value,
-      keyword: keyword.value.trim() || undefined
+      keyword: keyword.value || undefined
     })
     contestList.value = data.items
     total.value = data.total
+  } catch {
   } finally {
     loading.value = false
   }
 }
 
-// 加载全量题库供下拉挑选
 const loadProblemOptions = async () => {
   try {
     const data = await getProblemListApi({ pageNum: 1, pageSize: 100 })
@@ -283,9 +294,8 @@ const handleReset = () => {
   fetchContests()
 }
 
-// 题目动态增删
 const addProblemItem = () => {
-  form.problems.push({ problemId: null as any, displayTitle: '' })
+  form.problems.push({ problemId: null, displayTitle: '' })
 }
 
 const removeProblemItem = (idx: number) => {
@@ -296,56 +306,66 @@ const removeProblemItem = (idx: number) => {
   form.problems.splice(idx, 1)
 }
 
-// 挑选题目后自动填充比赛展示标题
-const onProblemSelect = (problemId: number, item: any) => {
+// 防止在同一场比赛的不同题号中重复选择同一道题
+const isProblemAlreadySelected = (problemId: number, currentIndex: number) => {
+  return form.problems.some((item, idx) => idx !== currentIndex && item.problemId === problemId)
+}
+
+const onProblemSelect = (problemId: number, item: { problemId: number | null; displayTitle: string }) => {
   const found = allProblemOptions.value.find(p => p.id === problemId)
-  if (found && !item.displayTitle) {
+  if (found) {
     item.displayTitle = found.title
   }
 }
 
-// 打开创建弹窗
 const openCreateModal = () => {
   isEdit.value = false
   editingId.value = null
   currentEditingStatus.value = ''
   form.title = ''
-  form.description = '### 比赛规则\n1. 采用标准 **ACM/ICPC** 赛制；\n2. 最终排名按解题数降序，相同者按总罚时升序；\n3. 严禁作弊！'
+  form.description = defaultContestDesc
   form.startTime = ''
   form.endTime = ''
-  form.problems = [{ problemId: null as any, displayTitle: '' }]
+  form.problems = [{ problemId: null, displayTitle: '' }]
   modalVisible.value = true
   loadProblemOptions()
 }
 
-// 打开编辑弹窗
-const openEditModal = async (row: any) => {
+const openEditModal = async (row: Contest) => {
   isEdit.value = true
   editingId.value = row.id
   currentEditingStatus.value = row.status
   modalVisible.value = true
+  modalLoading.value = true
   loadProblemOptions()
 
-  const detail = await getContestDetailApi(row.id)
-  form.title = detail.title
-  form.description = detail.description
-  form.startTime = detail.startTime
-  form.endTime = detail.endTime
+  try {
+    const detail = await getContestDetailApi(row.id)
+    form.title = detail.title
+    form.description = detail.description
+    form.startTime = detail.startTime
+    form.endTime = detail.endTime
 
-  // 加载该比赛当前的题目
-  const pList = await getContestProblemsApi(row.id)
-  form.problems = pList.map(p => ({
-    problemId: p.problemId,
-    displayTitle: p.displayTitle
-  }))
+    const pList = await getContestProblemsApi(row.id)
+    form.problems =
+      pList.length > 0
+        ? pList.map(p => ({
+            problemId: p.problemId,
+            displayTitle: p.displayTitle
+          }))
+        : [{ problemId: null, displayTitle: '' }]
+  } catch {
+    modalVisible.value = false
+  } finally {
+    modalLoading.value = false
+  }
 }
 
-// 提交表单 (创建/修改)
 const handleSubmit = async () => {
-  if (!formRef.value) return
+  if (!formRef.value || submitting.value) return
   for (const item of form.problems) {
     if (!item.problemId) {
-      ElMessage.warning('请为所有选中的题目指定题库编号！')
+      ElMessage.warning('请为所有比赛题目选择对应的题库编号！')
       return
     }
     if (!item.displayTitle) {
@@ -353,66 +373,76 @@ const handleSubmit = async () => {
     }
   }
 
-  await formRef.value.validate(async (valid: boolean) => {
-    if (!valid) return
-    submitting.value = true
-    try {
-      if (isEdit.value && editingId.value) {
-        await updateContestApi(editingId.value, form)
-        ElMessage.success('比赛修改成功！')
-      } else {
-        await createContestApi(form)
-        ElMessage.success('比赛创建成功，赛事公告已自动同步至讨论区！')
-      }
-      modalVisible.value = false
-      fetchContests()
-    } finally {
-      submitting.value = false
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
+
+  submitting.value = true
+  try {
+    if (isEdit.value && editingId.value) {
+      await updateContestApi(editingId.value, form)
+      ElMessage.success('比赛修改成功！')
+    } else {
+      await createContestApi(form)
+      ElMessage.success('比赛创建成功，赛事公告已自动同步至讨论区！')
     }
-  })
+    modalVisible.value = false
+    fetchContests()
+  } catch {
+  } finally {
+    submitting.value = false
+  }
 }
 
-// 赛后一键公开题目
-const handlePublishProblems = (row: any) => {
-  ElMessageBox.confirm(
-    `确定要将比赛《${row.title}》的所有保密题目同步开放至公共题库大厅吗？`,
-    '公开题目确认',
-    { confirmButtonText: '确定公开', cancelButtonText: '取消', type: 'success' }
-  ).then(async () => {
+const handlePublishProblems = async (row: Contest) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要将比赛《${row.title}》的所有保密题目同步开放至公共题库大厅吗？`,
+      '公开题目确认',
+      { confirmButtonText: '确定公开', cancelButtonText: '取消', type: 'success' }
+    )
     await publishContestProblemsApi(row.id)
     ElMessage.success('成功将比赛题目全部开放至公共题库！')
     fetchContests()
-  })
+  } catch {}
 }
 
-// 删除比赛
-const handleDelete = (row: any) => {
-  ElMessageBox.confirm(
-    `确定要删除比赛《${row.title}》吗？注意：底层的题目和测试点不会被删除。`,
-    '删除确认',
-    { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
-  ).then(async () => {
+const handleDelete = async (row: Contest) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除比赛《${row.title}》吗？注意：底层的题目和测试点不会被删除。`,
+      '删除确认',
+      { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
+    )
     await deleteContestApi(row.id)
     ElMessage.success('比赛已删除！')
     fetchContests()
-  })
+  } catch {}
 }
 
 const getStatusTagType = (status: string) => {
   switch (status) {
-    case 'RUNNING': return 'success'
-    case 'NOT_STARTED': return 'warning'
-    case 'ENDED': return 'info'
-    default: return 'info'
+    case 'RUNNING':
+      return 'success'
+    case 'NOT_STARTED':
+      return 'warning'
+    default:
+      return 'info'
   }
 }
 
 const getStatusText = (status: string) => {
   switch (status) {
-    case 'RUNNING': return '进行中'
-    case 'NOT_STARTED': return '未开始'
-    case 'ENDED': return '已结束'
-    default: return '未知'
+    case 'RUNNING':
+      return '进行中'
+    case 'NOT_STARTED':
+      return '未开始'
+    case 'ENDED':
+      return '已结束'
+    default:
+      return '未知'
   }
 }
 
@@ -426,6 +456,8 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
 }
 .search-box {
@@ -442,12 +474,14 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  width: 100%;
 }
 .auto-letter {
   font-weight: bold;
   color: #409eff;
-  width: 40px;
+  width: 45px;
   text-align: center;
   font-size: 15px;
+  flex-shrink: 0;
 }
 </style>

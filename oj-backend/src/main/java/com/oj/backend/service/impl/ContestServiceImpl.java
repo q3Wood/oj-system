@@ -3,27 +3,31 @@ package com.oj.backend.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.oj.backend.common.BusinessException;
+import com.oj.backend.common.JudgeConstants;
 import com.oj.backend.common.PageResult;
 import com.oj.backend.common.UserContext;
-import com.oj.backend.dto.*;
-import com.oj.backend.vo.*;
+import com.oj.backend.dto.ContestCreateDTO;
+import com.oj.backend.dto.ContestQueryDTO;
+import com.oj.backend.dto.ContestUpdateDTO;
 import com.oj.backend.entity.*;
 import com.oj.backend.mapper.*;
 import com.oj.backend.service.ContestService;
+import com.oj.backend.vo.ContestProblemVO;
+import com.oj.backend.vo.ContestRankVO;
+import com.oj.backend.vo.ContestVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.oj.backend.dto.ContestUpdateDTO;
-import com.oj.backend.vo.AdminContestVO;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ContestServiceImpl implements ContestService {
 
@@ -48,53 +52,117 @@ public class ContestServiceImpl implements ContestService {
     @Autowired
     private ContestUserMapper contestUserMapper;
 
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
-
-    // 5.1 获取比赛列表 (自动计算状态)
     @Override
-    public PageResult<Contest> listContests(Integer pageNum, Integer pageSize) {
-        Page<Contest> page = new Page<>(pageNum, pageSize);
+    public PageResult<ContestVO> listContests(ContestQueryDTO queryDTO) {
+        Page<Contest> page = new Page<>(queryDTO.getPageNum(), queryDTO.getPageSize());
         LambdaQueryWrapper<Contest> queryWrapper = new LambdaQueryWrapper<Contest>()
+                .like(StringUtils.hasText(queryDTO.getKeyword()), Contest::getTitle, queryDTO.getKeyword())
                 .orderByDesc(Contest::getId);
 
         contestMapper.selectPage(page, queryWrapper);
         List<Contest> records = page.getRecords();
-        records.forEach(this::calculateStatus);
+        if (records.isEmpty()) {
+            return new PageResult<>(page.getTotal(), Collections.emptyList());
+        }
 
-        return new PageResult<>(page.getTotal(), records);
+        Long currentUserId = UserContext.getUserId();
+        List<Long> contestIds = records.stream().map(Contest::getId).toList();
+
+        // 1. 批量查询各比赛绑定的题目映射
+        List<ContestProblem> cpList = contestProblemMapper.selectList(
+                new LambdaQueryWrapper<ContestProblem>().in(ContestProblem::getContestId, contestIds)
+        );
+        Map<Long, List<ContestProblem>> cpByContestMap = cpList.stream()
+                .collect(Collectors.groupingBy(ContestProblem::getContestId));
+
+        // 批量查出所有关联题目的公开状态，用于计算 isAllPublic (拒绝 N+1 查询)
+        Set<Long> allProblemIds = cpList.stream().map(ContestProblem::getProblemId).collect(Collectors.toSet());
+        Set<Long> secretProblemIds = allProblemIds.isEmpty() ? Collections.emptySet() :
+                problemMapper.selectList(
+                        new LambdaQueryWrapper<Problem>()
+                                .select(Problem::getId)
+                                .in(Problem::getId, allProblemIds)
+                                .eq(Problem::getIsPublic, 0)
+                ).stream().map(Problem::getId).collect(Collectors.toSet());
+
+        // 2. 批量统计报名人数与当前用户报名状态
+        List<ContestUser> cuList = contestUserMapper.selectList(
+                new LambdaQueryWrapper<ContestUser>().in(ContestUser::getContestId, contestIds)
+        );
+        Map<Long, Long> registeredCountMap = cuList.stream()
+                .collect(Collectors.groupingBy(ContestUser::getContestId, Collectors.counting()));
+
+        Set<Long> userRegisteredContestIds = (currentUserId == null) ? Collections.emptySet() :
+                cuList.stream()
+                        .filter(cu -> cu.getUserId().equals(currentUserId))
+                        .map(ContestUser::getContestId)
+                        .collect(Collectors.toSet());
+
+        List<ContestVO> voList = records.stream().map(c -> {
+            ContestVO vo = new ContestVO();
+            BeanUtils.copyProperties(c, vo);
+            vo.setStatus(calculateStatus(c));
+
+            List<ContestProblem> myProblems = cpByContestMap.getOrDefault(c.getId(), Collections.emptyList());
+            vo.setProblemCount(myProblems.size());
+            vo.setRegisteredCount(registeredCountMap.getOrDefault(c.getId(), 0L).intValue());
+            vo.setIsRegistered(userRegisteredContestIds.contains(c.getId()));
+
+            // 判断本场比赛的所有题目是否都已经公开 (没有任何一道题在 secretProblemIds 中)
+            boolean allPublic = myProblems.isEmpty() ||
+                    myProblems.stream().noneMatch(cp -> secretProblemIds.contains(cp.getProblemId()));
+            vo.setIsAllPublic(allPublic);
+
+            return vo;
+        }).toList();
+
+        return new PageResult<>(page.getTotal(), voList);
     }
 
-    // 5.2 获取单场比赛详情
     @Override
-    public Contest getContestById(Long id) {
+    public ContestVO getContestDetail(Long id) {
         Contest contest = contestMapper.selectById(id);
         if (contest == null) {
             throw new BusinessException("比赛不存在！(ID: " + id + ")");
         }
-        calculateStatus(contest);
-        return contest;
-    }
+        ContestVO vo = new ContestVO();
+        BeanUtils.copyProperties(contest, vo);
+        vo.setStatus(calculateStatus(contest));
 
-    // 5.3 获取比赛题目列表 (未开赛时拦截)
-    @Override
-    public List<ContestProblemVO> getContestProblems(Long contestId) {
-        Contest contest = getContestById(contestId);
-        String status = contest.getStatus();
+        Long pCount = contestProblemMapper.selectCount(
+                new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, id)
+        );
+        vo.setProblemCount(pCount == null ? 0 : pCount.intValue());
 
-        // 1. 未开赛：除了管理员，一律不准看题
-        if ("NOT_STARTED".equals(status) && !"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
-            throw new BusinessException("比赛尚未开始，题目保密中！");
+        Long uCount = contestUserMapper.selectCount(
+                new LambdaQueryWrapper<ContestUser>().eq(ContestUser::getContestId, id)
+        );
+        vo.setRegisteredCount(uCount == null ? 0 : uCount.intValue());
+
+        Long uid = UserContext.getUserId();
+        if (uid != null) {
+            vo.setIsRegistered(isUserRegistered(id, uid));
         }
 
-        // 2. 比赛进行中：必须是已报名的用户才能看题 (管理员免报名)
-        if ("RUNNING".equals(status) && !"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
-            if (!getRegisterStatus(contestId)) {
+        return vo;
+    }
+
+    @Override
+    public List<ContestProblemVO> getContestProblems(Long contestId) {
+        Contest contest = contestMapper.selectById(contestId);
+        if (contest == null) {
+            throw new BusinessException("比赛不存在！");
+        }
+        String status = calculateStatus(contest);
+
+        if ("NOT_STARTED".equals(status) && !isAdminOrRoot()) {
+            throw new BusinessException("比赛尚未开始，题目保密中！");
+        }
+        if ("RUNNING".equals(status) && !isAdminOrRoot()) {
+            if (!isUserRegistered(contestId, UserContext.getUserId())) {
                 throw new BusinessException("您尚未报名本场比赛，请先报名再查看题目！");
             }
         }
-
-        // 3. 比赛已结束：所有人自由公开看题，不设拦截！
 
         List<ContestProblem> cpList = contestProblemMapper.selectList(
                 new LambdaQueryWrapper<ContestProblem>()
@@ -104,27 +172,26 @@ public class ContestServiceImpl implements ContestService {
 
         return cpList.stream().map(cp -> new ContestProblemVO(
                 cp.getDisplayId(), cp.getDisplayTitle(), cp.getProblemId(), null, null, null
-        )).collect(Collectors.toList());
+        )).toList();
     }
 
-    // 5.4 获取单题详情 (题面做题页)
     @Override
     public ContestProblemVO getContestProblemDetail(Long contestId, String displayId) {
-        Contest contest = getContestById(contestId);
-        String status = contest.getStatus();
-        // 1. 未开赛：除了管理员，一律不准看题
-        if ("NOT_STARTED".equals(status) && !"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
+        Contest contest = contestMapper.selectById(contestId);
+        if (contest == null) {
+            throw new BusinessException("比赛不存在！");
+        }
+        String status = calculateStatus(contest);
+
+        if ("NOT_STARTED".equals(status) && !isAdminOrRoot()) {
             throw new BusinessException("比赛尚未开始，题目保密中！");
         }
-
-        // 2. 比赛进行中：必须是已报名的用户才能看题 (管理员免报名)
-        if ("RUNNING".equals(status) && !"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
-            if (!getRegisterStatus(contestId)) {
+        if ("RUNNING".equals(status) && !isAdminOrRoot()) {
+            if (!isUserRegistered(contestId, UserContext.getUserId())) {
                 throw new BusinessException("您尚未报名本场比赛，请先报名再查看题目！");
             }
         }
 
-        // 3. 比赛已结束：所有人自由公开看题，不设拦截！
         ContestProblem cp = contestProblemMapper.selectOne(
                 new LambdaQueryWrapper<ContestProblem>()
                         .eq(ContestProblem::getContestId, contestId)
@@ -145,80 +212,19 @@ public class ContestServiceImpl implements ContestService {
         );
     }
 
-    // 5.5 比赛内提交代码 (打上 contest_id 异步推队列)
-    @Override
-    public Submission submitContest(Long contestId, ContestSubmitDTO dto) {
-        Contest contest = getContestById(contestId);
-        if ("NOT_STARTED".equals(contest.getStatus())) {
-            throw new BusinessException("比赛尚未开始，严禁提前提交！");
-        }
-
-        if ("RUNNING".equals(contest.getStatus()) &&
-                !"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
-            if (!getRegisterStatus(contestId)) {
-                throw new BusinessException("您尚未报名本场比赛，请先报名再提交代码！");
-            }
-        }
-//        if ("ENDED".equals(contest.getStatus())) {
-//            throw new BusinessException("比赛已结束，请前往公共题库练习！");
-//        }
-
-        // 校验题目是否属于该场比赛
-        ContestProblem cp = contestProblemMapper.selectOne(
-                new LambdaQueryWrapper<ContestProblem>()
-                        .eq(ContestProblem::getContestId, contestId)
-                        .eq(ContestProblem::getProblemId, dto.getProblemId())
-        );
-        if (cp == null) {
-            throw new BusinessException("非法提交：该题目不属于本场比赛！");
-        }
-
-        Long userId = UserContext.getUserId();
-
-        String rateLimitKey = "limit:submit:user:" + userId;
-        Boolean acquire = stringRedisTemplate.opsForValue().setIfAbsent(rateLimitKey, "1", 5, TimeUnit.SECONDS);
-        if (Boolean.FALSE.equals(acquire)) {
-            throw new BusinessException("提交过于频繁，请稍后再试！");
-        }
-
-        // 插入数据库，带上 contest_id
-        Submission submission = new Submission();
-        submission.setUserId(userId);
-        submission.setProblemId(dto.getProblemId());
-        submission.setContestId(contestId); // 核心绑定比赛 ID
-        submission.setLanguage(dto.getLanguage());
-        submission.setCode(dto.getCode());
-        submission.setVerdict("PENDING");
-        submission.setMaxTimeMs(0);
-        submission.setPeakMemoryKb(0);
-        submission.setJudgeDetails("[]");
-        submission.setCreatedAt(LocalDateTime.now());
-        submission.setUpdatedAt(LocalDateTime.now());
-
-        submissionMapper.insert(submission);
-
-        // 推入 Redis 队列
-        stringRedisTemplate.opsForList().rightPush(
-                SubmissionServiceImpl.JUDGE_QUEUE_KEY,
-                submission.getId().toString()
-        );
-
-        return submission;
-    }
-
-    // 5.6 核心 ICPC 榜单与罚时动态计算引擎
     @Override
     public List<ContestRankVO> getContestRanklist(Long contestId) {
-        Contest contest = getContestById(contestId);
+        Contest contest = contestMapper.selectById(contestId);
+        if (contest == null) {
+            throw new BusinessException("比赛不存在！");
+        }
 
-        // 1. 获取比赛内所有题目映射 (problemId -> displayId 如: 1001 -> "A")
         List<ContestProblem> cpList = contestProblemMapper.selectList(
                 new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, contestId)
         );
         Map<Long, String> probToDisplayMap = cpList.stream()
                 .collect(Collectors.toMap(ContestProblem::getProblemId, ContestProblem::getDisplayId));
 
-        // 2. 查出本场比赛在起止时间内的所有提交记录 (严格按时间升序)
         List<Submission> submissions = submissionMapper.selectList(
                 new LambdaQueryWrapper<Submission>()
                         .eq(Submission::getContestId, contestId)
@@ -227,7 +233,6 @@ public class ContestServiceImpl implements ContestService {
                         .orderByAsc(Submission::getId)
         );
 
-        // 3. 按选手分组计算 ICPC 状态
         Map<Long, ContestRankVO> userRankMap = new HashMap<>();
 
         for (Submission sub : submissions) {
@@ -244,45 +249,42 @@ public class ContestServiceImpl implements ContestService {
             ContestRankVO.ProblemResult pResult = rankVO.getProblemResults()
                     .computeIfAbsent(displayId, k -> new ContestRankVO.ProblemResult());
 
-            // 规则：只要这道题已经 AC 了，后续的提交一律忽略
-            if (pResult.isSolved()) {
-                continue;
-            }
+            if (pResult.isSolved()) continue;
 
-            if ("Accepted".equals(sub.getVerdict())) {
+            String verdict = sub.getVerdict();
+            boolean isAc = JudgeConstants.ACCEPTED.equalsIgnoreCase(verdict) || JudgeConstants.AC.equalsIgnoreCase(verdict);
+
+            if (isAc) {
                 pResult.setSolved(true);
-                // 计算开赛到首个 AC 的分钟数
                 long timeMin = Math.max(0, Duration.between(contest.getStartTime(), sub.getCreatedAt()).toMinutes());
                 pResult.setTimeMin(timeMin);
 
-                // 累加总成绩：解题数+1，总罚时增加 (耗时 + 错题数 * 20)
                 rankVO.setSolvedCount(rankVO.getSolvedCount() + 1);
-                long currentProblemPenalty = timeMin + (pResult.getWrongTries() * 20L);
+                long currentProblemPenalty = timeMin + (pResult.getWrongTries() * JudgeConstants.ICPC_PENALTY_MINUTES_PER_WRONG);
                 rankVO.setTotalPenalty(rankVO.getTotalPenalty() + currentProblemPenalty);
 
-            } else if (!"Compile Error".equals(sub.getVerdict()) && !"PENDING".equals(sub.getVerdict()) && !"RUNNING".equals(sub.getVerdict())) {
-                // ICPC 规则：编译错误 (CE) 不计入罚时！其他非 AC 提交累加一次错误尝试
+            } else if (!JudgeConstants.COMPILE_ERROR.equalsIgnoreCase(verdict) &&
+                    !JudgeConstants.PENDING.equalsIgnoreCase(verdict) &&
+                    !JudgeConstants.RUNNING.equalsIgnoreCase(verdict)) {
                 pResult.setWrongTries(pResult.getWrongTries() + 1);
             }
         }
 
-        // 4. 排序：解题数降序 -> 总罚时升序
         List<ContestRankVO> rankList = new ArrayList<>(userRankMap.values());
         rankList.sort((a, b) -> {
             if (!a.getSolvedCount().equals(b.getSolvedCount())) {
-                return b.getSolvedCount() - a.getSolvedCount(); // AC 多的排前
+                return b.getSolvedCount() - a.getSolvedCount();
             }
             if (!a.getTotalPenalty().equals(b.getTotalPenalty())) {
-                return a.getTotalPenalty().compareTo(b.getTotalPenalty()); // 罚时少的排前
+                return a.getTotalPenalty().compareTo(b.getTotalPenalty());
             }
             return a.getUserId().compareTo(b.getUserId());
         });
 
-        // 5. 补齐用户名与名次序号 (1, 2, 3...)
         if (!rankList.isEmpty()) {
             Set<Long> userIds = rankList.stream().map(ContestRankVO::getUserId).collect(Collectors.toSet());
-            List<User> users = userMapper.selectBatchIds(userIds);
-            Map<Long, String> userNames = users.stream().collect(Collectors.toMap(User::getId, User::getUsername));
+            Map<Long, String> userNames = userMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(User::getId, User::getUsername));
 
             int currentRank = 1;
             for (ContestRankVO vo : rankList) {
@@ -290,22 +292,43 @@ public class ContestServiceImpl implements ContestService {
                 vo.setUsername(userNames.getOrDefault(vo.getUserId(), "选手 " + vo.getUserId()));
             }
         }
-
         return rankList;
     }
 
-    // 5.7 管理员创建比赛 (批量绑定并自动发布公告贴)
+    @Override
+    public void registerContest(Long contestId) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new BusinessException(401, "请先登录再报名参赛！");
+        }
+        Contest contest = contestMapper.selectById(contestId);
+        if (contest == null) {
+            throw new BusinessException("比赛不存在！");
+        }
+        if ("ENDED".equals(calculateStatus(contest))) {
+            throw new BusinessException("比赛已圆满结束，无需报名，可直接前往题库补题练习！");
+        }
+
+        if (isUserRegistered(contestId, userId)) {
+            throw new BusinessException("您已经报名过本场比赛，无需重复报名！");
+        }
+
+        ContestUser cu = new ContestUser();
+        cu.setContestId(contestId);
+        cu.setUserId(userId);
+        cu.setCreatedAt(LocalDateTime.now());
+        contestUserMapper.insert(cu);
+        log.info(">>> [Contest] 用户 #{} 成功报名了比赛 #{}: {}", userId, contestId, contest.getTitle());
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Contest createContest(ContestCreateDTO dto) {
-        if (!"ADMIN".equalsIgnoreCase(UserContext.getRole()) && !"ROOT".equalsIgnoreCase(UserContext.getRole())) {
-            throw new BusinessException("权限不足！只有系统管理员 (ADMIN) 允许发布比赛。");
-        }
+    public ContestVO createContest(ContestCreateDTO dto) {
+        checkAdminOrRoot();
         if (!dto.getStartTime().isBefore(dto.getEndTime())) {
             throw new BusinessException("比赛结束时间必须晚于开始时间！");
         }
 
-        // 1. 插入比赛主表
         Contest contest = new Contest();
         contest.setTitle(dto.getTitle());
         contest.setDescription(dto.getDescription());
@@ -315,7 +338,6 @@ public class ContestServiceImpl implements ContestService {
         contest.setUpdatedAt(LocalDateTime.now());
         contestMapper.insert(contest);
 
-        // 2. 批量绑定题目，自动赋予 A, B, C, D...
         char letter = 'A';
         for (ContestCreateDTO.ContestProblemItem item : dto.getProblems()) {
             ContestProblem cp = new ContestProblem();
@@ -327,178 +349,50 @@ public class ContestServiceImpl implements ContestService {
             contestProblemMapper.insert(cp);
         }
 
-        // 3. 【核心联动】：在 tb_post 自动发布官方置顶比赛公告贴！
         Post post = new Post();
         post.setUserId(UserContext.getUserId());
         post.setTitle("【官方赛事公告】" + contest.getTitle() + " 正式发布！");
         post.setContent(generateContestPostMarkdown(contest));
         post.setCategory("ANNOUNCEMENT");
         post.setRelatedId(contest.getId());
-        post.setIsPinned(1); // 置顶
+        post.setIsPinned(1);
         post.setViews(0);
         post.setLikes(0);
         post.setCreatedAt(LocalDateTime.now());
         post.setUpdatedAt(LocalDateTime.now());
         postMapper.insert(post);
 
-        return contest;
+        ContestVO vo = new ContestVO();
+        BeanUtils.copyProperties(contest, vo);
+        vo.setStatus(calculateStatus(contest));
+        vo.setProblemCount(dto.getProblems().size());
+        return vo;
     }
 
-    // 5.8 赛后一键公开题目到公共题库
-    @Override
-    public void publishContestProblems(Long contestId) {
-        if (!"ADMIN".equalsIgnoreCase(UserContext.getRole())) {
-            throw new BusinessException("权限不足！只有系统管理员允许公开题目。");
-        }
-
-        List<ContestProblem> cpList = contestProblemMapper.selectList(
-                new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, contestId)
-        );
-        if (cpList.isEmpty()) return;
-
-        List<Long> problemIds = cpList.stream().map(ContestProblem::getProblemId).collect(Collectors.toList());
-
-        // 一条 SQL 批量翻转可见性状态：UPDATE tb_problem SET is_public = 1 WHERE id IN (...)
-        problemMapper.update(null,
-                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Problem>()
-                        .in(Problem::getId, problemIds)
-                        .set(Problem::getIsPublic, 1)
-        );
-        System.out.println(">>> [Contest] 成功将比赛 #" + contestId + " 的 " + problemIds.size() + " 道保密题目开放至公共题库！");
-    }
-
-    // 5.9 用户报名参赛
-    @Override
-    public void registerContest(Long contestId) {
-        Long userId = UserContext.getUserId();
-        Contest contest = getContestById(contestId);
-
-        if ("ENDED".equals(contest.getStatus())) {
-            throw new BusinessException("比赛已结束，无需报名，可直接自由练习！");
-        }
-
-        // 检查是否已经报名过
-        Long count = contestUserMapper.selectCount(
-                new LambdaQueryWrapper<ContestUser>()
-                        .eq(ContestUser::getContestId, contestId)
-                        .eq(ContestUser::getUserId, userId)
-        );
-        if (count > 0) {
-            throw new BusinessException("您已经报名过本场比赛，无需重复报名！");
-        }
-
-        ContestUser cu = new ContestUser();
-        cu.setContestId(contestId);
-        cu.setUserId(userId);
-        cu.setCreatedAt(LocalDateTime.now());
-        contestUserMapper.insert(cu);
-    }
-
-    // 5.10 查询当前用户是否已报名
-    @Override
-    public boolean getRegisterStatus(Long contestId) {
-        Long userId = UserContext.getUserId();
-        if (userId == null) {
-            return false; // 未登录必定未报名
-        }
-        Long count = contestUserMapper.selectCount(
-                new LambdaQueryWrapper<ContestUser>()
-                        .eq(ContestUser::getContestId, contestId)
-                        .eq(ContestUser::getUserId, userId)
-        );
-        return count > 0;
-    }
-
-
-
-    // 1. 管理员后台列表 (带题数、报名人数、全公开标志)
-    @Override
-    public PageResult<AdminContestVO> listContestsForAdmin(Integer pageNum, Integer pageSize, String keyword) {
-        checkAdminOrRoot();
-
-        Page<Contest> page = new Page<>(pageNum, pageSize);
-        LambdaQueryWrapper<Contest> wrapper = new LambdaQueryWrapper<Contest>()
-                .like(StringUtils.hasText(keyword), Contest::getTitle, keyword)
-                .orderByDesc(Contest::getId);
-
-        contestMapper.selectPage(page, wrapper);
-        List<Contest> records = page.getRecords();
-
-        List<AdminContestVO> voList = new ArrayList<>();
-        for (Contest c : records) {
-            calculateStatus(c);
-            AdminContestVO vo = new AdminContestVO();
-            vo.setId(c.getId());
-            vo.setTitle(c.getTitle());
-            vo.setDescription(c.getDescription());
-            vo.setStartTime(c.getStartTime());
-            vo.setEndTime(c.getEndTime());
-            vo.setStatus(c.getStatus());
-            vo.setCreatedAt(c.getCreatedAt());
-
-            // 统计题目数
-            Long pCount = contestProblemMapper.selectCount(
-                    new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, c.getId())
-            );
-            vo.setProblemCount(pCount.intValue());
-
-            // 统计报名人数
-            Long uCount = contestUserMapper.selectCount(
-                    new LambdaQueryWrapper<ContestUser>().eq(ContestUser::getContestId, c.getId())
-            );
-            vo.setRegisteredCount(uCount.intValue());
-
-            // 检查题目是否已全部公开
-            List<ContestProblem> cpList = contestProblemMapper.selectList(
-                    new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, c.getId())
-            );
-            if (!cpList.isEmpty()) {
-                List<Long> pIds = cpList.stream().map(ContestProblem::getProblemId).collect(Collectors.toList());
-                Long secretCount = problemMapper.selectCount(
-                        new LambdaQueryWrapper<Problem>().in(Problem::getId, pIds).eq(Problem::getIsPublic, 0)
-                );
-                vo.setIsAllPublic(secretCount == 0);
-            } else {
-                vo.setIsAllPublic(true);
-            }
-
-            voList.add(vo);
-        }
-
-        return new PageResult<>(page.getTotal(), voList);
-    }
-
-    // 2. 修改比赛 (防作弊红线落地)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateContest(Long id, ContestUpdateDTO dto) {
         checkAdminOrRoot();
-
         Contest contest = contestMapper.selectById(id);
         if (contest == null) {
             throw new BusinessException("比赛不存在！");
         }
-        calculateStatus(contest);
-        String currentStatus = contest.getStatus();
+        String currentStatus = calculateStatus(contest);
 
         if (!dto.getStartTime().isBefore(dto.getEndTime())) {
             throw new BusinessException("结束时间必须晚于开始时间！");
         }
 
-        // ================= 【核心业务防作弊红线】 =================
         if ("RUNNING".equals(currentStatus)) {
-            // 比赛进行中：严禁修改开始时间！
             if (!contest.getStartTime().isEqual(dto.getStartTime())) {
                 throw new BusinessException("比赛正在进行中，严禁修改开始时间 (防止榜单罚时错乱)！");
             }
-            // 只允许延长结束时间，不允许提前结束正在打的比赛
             if (dto.getEndTime().isBefore(contest.getEndTime())) {
                 throw new BusinessException("比赛进行中，只允许延长比赛结束时间！");
             }
         } else if ("ENDED".equals(currentStatus)) {
-            // 比赛已结束：禁止再次修改时间
             if (!contest.getStartTime().isEqual(dto.getStartTime()) || !contest.getEndTime().isEqual(dto.getEndTime())) {
-                throw new BusinessException("比赛已圆满结束，禁止修改历史起止时间！");
+                throw new BusinessException("比赛已结束，禁止修改历史起止时间！");
             }
         }
 
@@ -509,9 +403,7 @@ public class ContestServiceImpl implements ContestService {
         contest.setUpdatedAt(LocalDateTime.now());
         contestMapper.updateById(contest);
 
-        // 如果未开赛，允许重新编排 A/B/C 题目映射
-        if ("NOT_STARTED".equals(currentStatus)) {
-            // 先清空旧映射
+        if ("NOT_STARTED".equals(currentStatus) && dto.getProblems() != null) {
             contestProblemMapper.delete(new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, id));
             char letter = 'A';
             for (ContestCreateDTO.ContestProblemItem item : dto.getProblems()) {
@@ -526,55 +418,73 @@ public class ContestServiceImpl implements ContestService {
         }
     }
 
-    // 3. 删除比赛 (安全边界：绝不误删底层题目)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteContest(Long id) {
         checkAdminOrRoot();
-
         Contest contest = contestMapper.selectById(id);
         if (contest == null) {
             throw new BusinessException("比赛不存在！");
         }
-
-        // 1. 删除比赛主表
         contestMapper.deleteById(id);
-        // 2. 删除题目映射关系 (注意：底层的 tb_problem 毫发无损！)
         contestProblemMapper.delete(new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, id));
-        // 3. 删除报名记录
         contestUserMapper.delete(new LambdaQueryWrapper<ContestUser>().eq(ContestUser::getContestId, id));
     }
 
-    private void checkAdminOrRoot() {
+    @Override
+    public void publishContestProblems(Long contestId) {
+        checkAdminOrRoot();
+        List<ContestProblem> cpList = contestProblemMapper.selectList(
+                new LambdaQueryWrapper<ContestProblem>().eq(ContestProblem::getContestId, contestId)
+        );
+        if (cpList.isEmpty()) return;
+
+        List<Long> problemIds = cpList.stream().map(ContestProblem::getProblemId).toList();
+        problemMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Problem>()
+                        .in(Problem::getId, problemIds)
+                        .set(Problem::getIsPublic, 1)
+        );
+        log.info(">>> [Contest] 成功将比赛 #{} 的 {} 道题目开放至公共题库！", contestId, problemIds.size());
+    }
+
+    private boolean isUserRegistered(Long contestId, Long userId) {
+        if (userId == null) return false;
+        Long count = contestUserMapper.selectCount(
+                new LambdaQueryWrapper<ContestUser>()
+                        .eq(ContestUser::getContestId, contestId)
+                        .eq(ContestUser::getUserId, userId)
+        );
+        return count != null && count > 0;
+    }
+
+    private boolean isAdminOrRoot() {
         String role = UserContext.getRole();
-        if (!"ADMIN".equalsIgnoreCase(role) && !"ROOT".equalsIgnoreCase(role)) {
-            throw new BusinessException("权限不足！只有管理员才允许进行此操作。");
+        return "ADMIN".equalsIgnoreCase(role) || "ROOT".equalsIgnoreCase(role);
+    }
+
+    private void checkAdminOrRoot() {
+        if (!isAdminOrRoot()) {
+            throw new BusinessException(403, "权限不足！只有系统管理员才允许进行此操作。");
         }
     }
 
-
-    // 辅助方法：动态计算当前比赛状态
-    private void calculateStatus(Contest contest) {
+    private String calculateStatus(Contest contest) {
         LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(contest.getStartTime())) {
-            contest.setStatus("NOT_STARTED");
-        } else if (now.isAfter(contest.getEndTime())) {
-            contest.setStatus("ENDED");
-        } else {
-            contest.setStatus("RUNNING");
-        }
+        if (now.isBefore(contest.getStartTime())) return "NOT_STARTED";
+        if (now.isAfter(contest.getEndTime())) return "ENDED";
+        return "RUNNING";
     }
 
-    // 辅助方法：自动发帖 Markdown 模板生成
     private String generateContestPostMarkdown(Contest contest) {
         return "### 🏆 " + contest.getTitle() + " 已经发布！\n\n" +
-                "- **赛制模式**：标准 ACM/ICPC 赛制 (通过题数优先，同题数按罚时排序)\n" +
+                "- **赛制模式**：标准 ACM/ICPC 赛制\n" +
                 "- **开赛时间**：`" + contest.getStartTime() + "`\n" +
                 "- **结束时间**：`" + contest.getEndTime() + "`\n\n" +
                 "#### 竞赛规程须知：\n" +
                 "1. 比赛期间题目处于保密状态，开赛后准时解锁并开放提交；\n" +
-                "2. 每道题首次 AC 之前的非 CE 错误提交均计入 **20 分钟罚时**；\n" +
-                "3. 比赛结束后，本场所有题目将一键开放至公共题库供赛后补题！\n\n" +
-                "祝各位选手发挥出色，AK 全场！💪";
+                "2. 首次通过 (AC) 之前的每次非 CE 提交累加 **20 分钟罚时**；\n" +
+                "3. 比赛结束后，本场所有题目将开放至公共题库供赛后补题！\n\n" +
+                "祝各位选手发挥出色！💪";
     }
 }

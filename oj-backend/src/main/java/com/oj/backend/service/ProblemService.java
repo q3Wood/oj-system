@@ -2,19 +2,26 @@ package com.oj.backend.service;
 
 import com.oj.backend.common.PageResult;
 import com.oj.backend.dto.ProblemCreateDTO;
+import com.oj.backend.dto.ProblemQueryDTO;
 import com.oj.backend.dto.ProblemUpdateDTO;
-import com.oj.backend.entity.Problem;
+import com.oj.backend.vo.ProblemVO;
 
 public interface ProblemService {
-    // 1. 统一题目查询 (智能识别：普通用户只看公开题，管理员看全量，支持多关键词模糊搜索)
-    PageResult<Problem> listProblems(Integer pageNum, Integer pageSize, String keyword, Integer isPublic);
 
-    // 2. 查单题详情
-    Problem getProblemById(Long id);
+    // 多条件分页查询题目列表
+    PageResult<ProblemVO> listProblems(ProblemQueryDTO queryDTO);
 
-    // 3. 创建题目 (自动发号 + 解压 Zip)
-    Problem createProblem(ProblemCreateDTO dto);
+    // 获取单题详情
+    ProblemVO getProblemById(Long id);
 
-    // 4. 统一更新题目 (支持改时空限制、题面描述与公开状态)
-    Problem updateProblem(Long id, ProblemUpdateDTO dto);
+    // 创建题目
+    ProblemVO createProblem(ProblemCreateDTO dto);
+
+    // 更新题目
+    ProblemVO updateProblem(Long id, ProblemUpdateDTO dto);
+
+    // 逻辑软删除题目
+    void deleteProblem(Long id);
+
+    void updateProblemVisibility(Long id, Integer isPublic);
 }

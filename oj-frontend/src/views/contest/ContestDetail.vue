@@ -1,19 +1,17 @@
 <template>
   <div class="nowcoder-contest-container" v-loading="loading">
-    <!-- ================= 1. 牛客同款深色头部 Banner ================= -->
+    <!-- 1. 牛客同款深色头部 Banner -->
     <div class="contest-hero-banner">
       <div class="banner-inner">
         <div class="breadcrumb-nav">
-          <el-link :underline="false" icon="Back" style="color: #909399;" @click="$router.push('/contests')">
+          <el-link :underline="false" :icon="Back" style="color: #909399;" @click="$router.push('/contests')">
             赛事大厅
           </el-link>
           <span class="sep">/</span>
           <span style="color: #c0c4cc;">当前比赛</span>
         </div>
 
-<!-- 左右对称布局：左边标题时间，右边报名按钮 -->
         <div class="banner-main-row">
-          <!-- 左侧：标题、标签与时间 -->
           <div class="banner-left-info">
             <div class="banner-title-row">
               <h1 class="main-title">{{ contest?.title }}</h1>
@@ -28,6 +26,7 @@
 
             <div class="banner-meta-bar">
               <span class="meta-item">时间: <b>{{ contest?.startTime }}</b> 至 <b>{{ contest?.endTime }}</b></span>
+              <span class="meta-item">已报名: <b>{{ contest?.registeredCount ?? 0 }} 人</b></span>
               <span class="meta-item countdown-text" v-if="contest?.status === 'RUNNING'">
                 距离比赛结束: <b>{{ countdownStr }}</b>
               </span>
@@ -37,12 +36,12 @@
             </div>
           </div>
 
-          <!-- 右侧：牛客同款右侧吸附操作区 -->
+          <!-- 右侧操作区 -->
           <div class="banner-right-action">
             <template v-if="contest?.status !== 'ENDED'">
-              <el-button 
-                v-if="!isRegistered" 
-                type="primary" 
+              <el-button
+                v-if="!isRegistered"
+                type="primary"
                 size="large"
                 class="register-btn"
                 :loading="registering"
@@ -51,7 +50,7 @@
                 立即报名参赛
               </el-button>
               <div v-else class="registered-badge">
-                <el-icon :size="16" style="margin-right: 6px;"><Check /></el-icon>
+                <el-icon :size="16" style="margin-right: 6px;"><Check/></el-icon>
                 已报名参赛
               </div>
             </template>
@@ -63,45 +62,41 @@
       </div>
     </div>
 
-    <!-- ================= 2. 标签导航栏 (仿牛客 tabs) ================= -->
+    <!-- 2. 标签导航栏 -->
     <div class="contest-tab-nav">
       <div class="nav-inner">
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 'info' }" 
-          @click="handleTabChange('info')"
-        >
+        <div class="tab-item" :class="{ active: activeTab === 'info' }" @click="handleTabChange('info')">
           比赛说明
         </div>
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 'problems' }" 
-          @click="handleTabChange('problems')"
-        >
-          题目
+        <div class="tab-item" :class="{ active: activeTab === 'problems' }" @click="handleTabChange('problems')">
+          题目 ({{ contest?.problemCount ?? problemList.length }})
         </div>
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 'ranklist' }" 
-          @click="handleTabChange('ranklist')"
-        >
+        <div class="tab-item" :class="{ active: activeTab === 'ranklist' }" @click="handleTabChange('ranklist')">
           🏆 排名 (ICPC 榜单)
         </div>
       </div>
     </div>
 
-<!-- ================= 3. 主体内容区域 (牛客一体化平滑白底) ================= -->
+    <!-- 3. 主体内容区域 -->
     <div class="contest-body-wrap">
       <div class="content-main-area">
-        <!-- Tab 1: 比赛说明 (Markdown) -->
-        <div v-show="activeTab === 'info'" class="markdown-body" v-html="renderedDescription"></div>
+        <!-- Tab 1: 比赛说明 (复用 ProblemDescription) -->
+        <ProblemDescription :content="contest?.description" v-show="activeTab === 'info'"/>
 
-        <!-- Tab 2: 题目列表 (牛客同款表格) -->
+        <!-- Tab 2: 题目列表 (管理员在未开赛时亦可提前预览测试题目) -->
         <div v-show="activeTab === 'problems'" class="problems-table-section">
-          <div v-if="contest?.status === 'NOT_STARTED'" class="locked-tip-box">
+          <div v-if="contest?.status === 'NOT_STARTED' && !isAdmin" class="locked-tip-box">
             <el-empty description="比赛尚未开始，题目处于严格保密状态，开赛后准时解锁！" />
           </div>
           <div v-else>
+            <el-alert
+              v-if="contest?.status === 'NOT_STARTED' && isAdmin"
+              title="管理员预览模式：比赛尚未开始，您当前以管理员身份提前检阅比赛题目。"
+              type="warning"
+              show-icon
+              :closable="false"
+              style="margin-bottom: 16px;"
+            />
             <el-table :data="problemList" style="width: 100%" stripe>
               <el-table-column prop="displayId" label="题号" width="100" align="center">
                 <template #default="{ row }">
@@ -111,9 +106,9 @@
 
               <el-table-column prop="displayTitle" label="标题" min-width="300">
                 <template #default="{ row }">
-                  <el-link 
-                    type="primary" 
-                    :underline="false" 
+                  <el-link
+                    type="primary"
+                    :underline="false"
                     class="problem-link"
                     @click="openProblemInNewTab(row.displayId)"
                   >
@@ -124,10 +119,10 @@
 
               <el-table-column label="作答操作" width="160" align="center">
                 <template #default="{ row }">
-                  <el-button 
-                    type="primary" 
-                    size="small" 
-                    icon="EditPen"
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :icon="EditPen"
                     @click="openProblemInNewTab(row.displayId)"
                   >
                     在新标签页做题
@@ -141,7 +136,7 @@
         <!-- Tab 3: ICPC 实时排行榜 -->
         <div v-show="activeTab === 'ranklist'" class="ranklist-section">
           <div class="rank-tools">
-            <span class="tip">榜单严格按 ICPC 赛制计算：AC 题数优先，同题数按总罚时升序排序 (错题罚时 20 分钟)</span>
+            <span class="tip">榜单严格按 ICPC 赛制计算：AC 题数优先，同题数按总罚时升序排序 (每次非 CE 错题罚时 20 分钟)</span>
             <el-button size="small" :icon="Refresh" @click="fetchRanklist">刷新实时榜单</el-button>
           </div>
 
@@ -168,17 +163,19 @@
               <template #default="{ row }">{{ row.totalPenalty }} m</template>
             </el-table-column>
 
-            <el-table-column 
-              v-for="p in problemList" 
-              :key="p.displayId" 
-              :label="p.displayId" 
-              width="95" 
+            <el-table-column
+              v-for="p in problemList"
+              :key="p.displayId"
+              :label="p.displayId"
+              width="95"
               align="center"
             >
               <template #default="{ row }">
                 <div class="problem-cell" :class="getCellClass(row.problemResults?.[p.displayId])">
                   <template v-if="row.problemResults?.[p.displayId]?.solved">
-                    <div class="cell-main">+{{ row.problemResults[p.displayId].wrongTries }}</div>
+                    <div class="cell-main">
+                      +{{ row.problemResults[p.displayId].wrongTries > 0 ? row.problemResults[p.displayId].wrongTries : '' }}
+                    </div>
                     <div class="cell-sub">{{ row.problemResults[p.displayId].timeMin }}m</div>
                   </template>
                   <template v-else-if="row.problemResults?.[p.displayId]?.wrongTries > 0">
@@ -198,23 +195,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Refresh } from '@element-plus/icons-vue'
-import { marked } from 'marked'
+import { ElMessage } from 'element-plus'
+import { Refresh, Check, Back, EditPen } from '@element-plus/icons-vue'
+import ProblemDescription from '../../components/ProblemDescription.vue'
 import {
   getContestDetailApi,
   getContestProblemsApi,
   getContestRanklistApi,
-  registerContestApi,
-  getContestRegisterStatusApi
+  registerContestApi
 } from '../../api/contest'
-import type { Contest, ContestProblem, ContestRank, ProblemResult } from '../../types'
 import { useUserStore } from '../../stores/user'
-import { ElMessage } from 'element-plus'
+import type { Contest, ContestProblem, ContestRank, ProblemResult } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const contestId = Number(route.params.id)
 
 const loading = ref(false)
@@ -224,20 +221,33 @@ const activeTab = ref('info')
 const problemList = ref<ContestProblem[]>([])
 const ranklist = ref<ContestRank[]>([])
 
-const userStore = useUserStore()
 const isRegistered = ref(false)
 const registering = ref(false)
 
-// 检查报名状态
-const checkRegisterStatus = async () => {
-    if (userStore.token) {
-        try {
-            isRegistered.value = await getContestRegisterStatusApi(contestId)
-        } catch {}
+const isAdmin = computed(() => {
+  const role = userStore.userInfo?.role
+  return role === 'ADMIN' || role === 'ROOT'
+})
+
+const countdownStr = ref('00:00:00')
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+const fetchContestDetail = async () => {
+  loading.value = true
+  try {
+    const data = await getContestDetailApi(contestId)
+    contest.value = data
+    isRegistered.value = !!data.isRegistered
+    startCountdown()
+    if (data.status !== 'NOT_STARTED' || isAdmin.value) {
+      fetchProblems()
     }
+  } catch {
+  } finally {
+    loading.value = false
+  }
 }
 
-// 点击报名
 const handleRegister = async () => {
   if (!userStore.token) {
     ElMessage.warning('请先登录再报名参赛！')
@@ -250,32 +260,15 @@ const handleRegister = async () => {
     await registerContestApi(contestId)
     ElMessage.success('🎉 报名成功！祝你比赛取得优异成绩！')
     isRegistered.value = true
-    // 报名成功后重新拉取题目
-    fetchProblems()
-  } catch {} finally {
-    registering.value = false
-  }
-}
-
-
-// 倒计时
-const countdownStr = ref('00:00:00')
-let countdownTimer: any = null
-
-const renderedDescription = computed(() => {
-  return marked.parse(contest.value?.description || '') as string
-})
-
-const fetchContestDetail = async () => {
-  loading.value = true
-  try {
-    contest.value = await getContestDetailApi(contestId)
-    startCountdown()
-    if (contest.value.status !== 'NOT_STARTED') {
+    if (contest.value) {
+      contest.value.registeredCount = (contest.value.registeredCount || 0) + 1
+    }
+    if (contest.value?.status !== 'NOT_STARTED' || isAdmin.value) {
       fetchProblems()
     }
+  } catch {
   } finally {
-    loading.value = false
+    registering.value = false
   }
 }
 
@@ -283,16 +276,17 @@ const startCountdown = () => {
   if (countdownTimer) clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
     if (!contest.value) return
-    const now = new Date().getTime()
-    const target = contest.value.status === 'NOT_STARTED'
-      ? new Date(contest.value.startTime).getTime()
-      : new Date(contest.value.endTime).getTime()
-    
+    const now = Date.now()
+    const target =
+      contest.value.status === 'NOT_STARTED'
+        ? new Date(contest.value.startTime).getTime()
+        : new Date(contest.value.endTime).getTime()
+
     const diff = target - now
     if (diff <= 0) {
       countdownStr.value = contest.value.status === 'NOT_STARTED' ? '已开赛' : '已结束'
-      clearInterval(countdownTimer)
-      fetchContestDetail() // 刷新状态
+      if (countdownTimer) clearInterval(countdownTimer)
+      fetchContestDetail()
       return
     }
     const h = Math.floor(diff / (1000 * 60 * 60))
@@ -305,31 +299,34 @@ const startCountdown = () => {
 const fetchProblems = async () => {
   try {
     problemList.value = await getContestProblemsApi(contestId)
-  } catch (e) {}
+  } catch {}
 }
 
 const fetchRanklist = async () => {
   try {
     ranklist.value = await getContestRanklistApi(contestId)
-  } catch (e) {}
+  } catch {}
 }
 
 const handleTabChange = (tab: string) => {
   activeTab.value = tab
   if (tab === 'problems' && problemList.value.length === 0) {
-    fetchProblems()
+    if (contest.value?.status !== 'NOT_STARTED' || isAdmin.value) {
+      fetchProblems()
+    }
   } else if (tab === 'ranklist') {
+    if (problemList.value.length === 0 && (contest.value?.status !== 'NOT_STARTED' || isAdmin.value)) {
+      fetchProblems()
+    }
     fetchRanklist()
   }
 }
 
-// 【核心体验升级】：在新标签页打开全屏做题页！
 const openProblemInNewTab = (displayId: string) => {
   const routeData = router.resolve(`/contests/${contestId}/problems/${displayId}`)
   window.open(routeData.href, '_blank')
 }
 
-// 样式与辅助函数
 const getCellClass = (res?: ProblemResult) => {
   if (!res) return ''
   if (res.solved) return 'cell-ac-bg'
@@ -339,25 +336,30 @@ const getCellClass = (res?: ProblemResult) => {
 
 const getStatusTagType = (status?: string) => {
   switch (status) {
-    case 'RUNNING': return 'success'
-    case 'NOT_STARTED': return 'warning'
-    case 'ENDED': return 'info'
-    default: return 'info'
+    case 'RUNNING':
+      return 'success'
+    case 'NOT_STARTED':
+      return 'warning'
+    default:
+      return 'info'
   }
 }
 
 const getStatusText = (status?: string) => {
   switch (status) {
-    case 'RUNNING': return '进行中'
-    case 'NOT_STARTED': return '未开始'
-    case 'ENDED': return '已结束'
-    default: return '未知'
+    case 'RUNNING':
+      return '进行中'
+    case 'NOT_STARTED':
+      return '未开始'
+    case 'ENDED':
+      return '已结束'
+    default:
+      return '未知'
   }
 }
 
 onMounted(() => {
   fetchContestDetail()
-  checkRegisterStatus()
 })
 
 onBeforeUnmount(() => {
@@ -368,11 +370,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .nowcoder-contest-container {
   min-height: calc(100vh - 110px);
-  background-color: #ffffff; /* 从 #f5f7fa 改成 #ffffff */
+  background-color: #ffffff;
   margin: -24px -40px;
 }
-
-/* 仿牛客深色顶部 Banner */
 .contest-hero-banner {
   background: linear-gradient(135deg, #1f2329 0%, #2d323c 100%);
   color: #fff;
@@ -393,11 +393,20 @@ onBeforeUnmount(() => {
   margin: 0 8px;
   color: #606266;
 }
+.banner-main-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+.banner-left-info {
+  flex: 1;
+}
 .banner-title-row {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .main-title {
   margin: 0;
@@ -411,6 +420,7 @@ onBeforeUnmount(() => {
 }
 .banner-meta-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 28px;
   font-size: 14px;
   color: #a8abb2;
@@ -420,8 +430,36 @@ onBeforeUnmount(() => {
   font-family: monospace;
   font-size: 16px;
 }
-
-/* 仿牛客标签导航 */
+.banner-right-action {
+  flex-shrink: 0;
+}
+.register-btn {
+  font-size: 16px;
+  font-weight: bold;
+  height: 44px;
+  padding: 0 28px;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(64, 158, 255, 0.4);
+}
+.registered-badge {
+  display: flex;
+  align-items: center;
+  background-color: rgba(103, 194, 58, 0.15);
+  border: 1px solid #67c23a;
+  color: #67c23a;
+  font-size: 15px;
+  font-weight: bold;
+  padding: 10px 22px;
+  border-radius: 8px;
+}
+.ended-badge {
+  background-color: rgba(144, 147, 153, 0.2);
+  border: 1px solid #909399;
+  color: #c0c4cc;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 8px;
+}
 .contest-tab-nav {
   background-color: #fff;
   border-bottom: 1px solid #e4e7ed;
@@ -450,34 +488,15 @@ onBeforeUnmount(() => {
   border-bottom-color: #409eff;
   font-weight: bold;
 }
-
-/* 主体内容卡片 */
-/* .contest-body-wrap {
-  max-width: 1400px;
-  margin: 24px auto;
-  padding: 0 48px;
-} */
-/* 主体内容区域：与 Tab 栏同宽，自然向下延伸，完全消灭外层灰色背景和边框 */
 .contest-body-wrap {
   max-width: 1400px;
   margin: 0 auto;
   padding: 32px 48px;
   background-color: #ffffff;
 }
-.content-box-card {
-  border-radius: 8px;
+.content-main-area {
   min-height: 480px;
 }
-
-/* Markdown 排版细节 */
-.markdown-body {
-  font-size: 15px;
-  line-height: 1.8;
-  color: #2c3e50;
-  padding: 0; /* 清除不必要的内边距 */
-}
-
-/* 题目表格 */
 .problem-display-id {
   font-size: 16px;
   font-weight: bold;
@@ -487,8 +506,6 @@ onBeforeUnmount(() => {
   font-size: 15px;
   font-weight: 500;
 }
-
-/* ICPC 榜单 */
 .rank-tools {
   display: flex;
   justify-content: space-between;
@@ -506,7 +523,6 @@ onBeforeUnmount(() => {
 .rank-1 { color: #f56c6c; font-size: 17px; }
 .rank-2 { color: #e6a23c; font-size: 16px; }
 .rank-3 { color: #409eff; font-size: 15px; }
-
 .problem-cell {
   height: 44px;
   display: flex;
@@ -515,85 +531,10 @@ onBeforeUnmount(() => {
   align-items: center;
   border-radius: 4px;
 }
-.cell-ac-bg {
-  background-color: #e1f3d8;
-  color: #67c23a;
-}
-.cell-wa-bg {
-  background-color: #fde2e2;
-  color: #f56c6c;
-}
-.cell-main {
-  font-weight: bold;
-  font-size: 14px;
-}
-.cell-sub {
-  font-size: 11px;
-}
-.cell-failed {
-  font-weight: bold;
-  font-size: 14px;
-}
-.cell-empty {
-  color: #c0c4cc;
-}
-
-.content-main-area {
-  min-height: 480px;
-}
-
-/* Banner 左右主行两端对齐 */
-.banner-main-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-}
-
-.banner-left-info {
-  flex: 1;
-}
-
-.banner-title-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-/* 右侧大按钮与徽章精致化 */
-.banner-right-action {
-  flex-shrink: 0;
-}
-
-.register-btn {
-  font-size: 16px;
-  font-weight: bold;
-  height: 44px;
-  padding: 0 28px;
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(64, 158, 255, 0.4);
-}
-
-.registered-badge {
-  display: flex;
-  align-items: center;
-  background-color: rgba(103, 194, 58, 0.15);
-  border: 1px solid #67c23a;
-  color: #67c23a;
-  font-size: 15px;
-  font-weight: bold;
-  padding: 10px 22px;
-  border-radius: 8px;
-}
-
-.ended-badge {
-  background-color: rgba(144, 147, 153, 0.2);
-  border: 1px solid #909399;
-  color: #c0c4cc;
-  font-size: 14px;
-  padding: 10px 20px;
-  border-radius: 8px;
-}
-
+.cell-ac-bg { background-color: #e1f3d8; color: #67c23a; }
+.cell-wa-bg { background-color: #fde2e2; color: #f56c6c; }
+.cell-main { font-weight: bold; font-size: 14px; }
+.cell-sub { font-size: 11px; }
+.cell-failed { font-weight: bold; font-size: 14px; }
+.cell-empty { color: #c0c4cc; }
 </style>

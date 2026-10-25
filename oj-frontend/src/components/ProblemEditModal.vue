@@ -8,7 +8,7 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" v-loading="loading">
       <el-form-item label="题目标题" prop="title">
-        <el-input v-model="form.title" placeholder="请输入题目标题" />
+        <el-input v-model.trim="form.title" placeholder="请输入题目标题" />
       </el-form-item>
 
       <el-row :gutter="20">
@@ -26,8 +26,8 @@
 
       <el-form-item label="公开状态">
         <el-radio-group v-model="form.isPublic">
-          <el-radio :label="1">公开到题库大厅</el-radio>
-          <el-radio :label="0">设为比赛保密题</el-radio>
+          <el-radio :value="1">公开到题库大厅</el-radio>
+          <el-radio :value="0">设为比赛保密题</el-radio>
         </el-radio-group>
       </el-form-item>
 
@@ -36,13 +36,14 @@
           v-model="form.description"
           type="textarea"
           :rows="10"
-          placeholder="支持标准 Markdown 语法..."
+          placeholder="支持标准 Markdown 与 LaTeX 公式语法..."
         />
       </el-form-item>
 
-      <!-- 测试用例 Zip 压缩包上传 (新建时必传，编辑时选传覆盖) -->
-      <el-form-item :label="isEdit ? '更新测试用例压缩包 (选填，不传则保留原用例)' : '测试用例压缩包 (.zip)'">
+      <!-- 测试用例 Zip 压缩包上传 -->
+      <el-form-item :label="isEdit ? '更新测试用例压缩包 (选填，上传将彻底清空并覆盖原用例)' : '测试用例压缩包 (.zip)'">
         <el-upload
+          ref="uploadRef"
           class="upload-demo"
           drag
           action="#"
@@ -51,14 +52,15 @@
           accept=".zip"
           :on-change="handleFileChange"
           :on-remove="handleFileRemove"
+          :on-exceed="handleFileExceed"
         >
-          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
           <div class="el-upload__text">
             将测试用例 .zip 拖到此处，或 <em>点击上传</em>
           </div>
           <template #tip>
             <div class="el-upload__tip">
-              必须包含成对的 <code>1.in</code>, <code>1.ans</code> 等文件
+              必须包含成对的测试点文件（如 <code>1.in</code>, <code>1.ans</code> 或 <code>1.out</code>）
             </div>
           </template>
         </el-upload>
@@ -76,13 +78,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { ElMessage, type UploadFile } from 'element-plus'
+import { ElMessage, genFileId, type FormInstance, type UploadInstance, type UploadFile, type UploadProps, type UploadRawFile } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { getProblemDetailApi, createProblemApi, updateProblemApi } from '../api/problem'
 
 interface Props {
   modelValue: boolean
-  problemId?: number | null // 有 ID 为编辑模式，无 ID 为新建模式
+  problemId?: number | null
 }
 
 const props = defineProps<Props>()
@@ -99,7 +101,8 @@ const visible = computed({
 const isEdit = computed(() => !!props.problemId)
 const loading = ref(false)
 const submitting = ref(false)
-const formRef = ref()
+const formRef = ref<FormInstance>()
+const uploadRef = ref<UploadInstance>()
 const selectedFile = ref<File | null>(null)
 
 const defaultDesc = `### 题目描述\n\n### 输入格式\n\n### 输出格式\n\n### 样例输入\n\`\`\`\n\n\`\`\`\n### 样例输出\n\`\`\`\n\n\`\`\`\n`
@@ -125,6 +128,15 @@ const handleFileRemove = () => {
   selectedFile.value = null
 }
 
+// 当用户直接拖入第二个 zip 文件时，自动替换掉第一个文件
+const handleFileExceed: UploadProps['onExceed'] = (files) => {
+  uploadRef.value?.clearFiles()
+  const file = files[0] as UploadRawFile
+  file.uid = genFileId()
+  uploadRef.value?.handleStart(file)
+  selectedFile.value = file
+}
+
 const handleClosed = () => {
   form.title = ''
   form.description = defaultDesc
@@ -132,9 +144,9 @@ const handleClosed = () => {
   form.memoryLimitMb = 256
   form.isPublic = 1
   selectedFile.value = null
+  uploadRef.value?.clearFiles()
 }
 
-// 打开弹窗时拉取详情
 watch(
   () => props.modelValue,
   async (isOpen) => {
@@ -146,7 +158,9 @@ watch(
         form.description = data.description || ''
         form.timeLimitMs = data.timeLimitMs
         form.memoryLimitMb = data.memoryLimitMb
-        form.isPublic = (data as any).isPublic ?? 1
+        form.isPublic = data.isPublic ?? 1
+      } catch {
+        visible.value = false
       } finally {
         loading.value = false
       }
@@ -155,40 +169,44 @@ watch(
 )
 
 const handleSubmit = async () => {
-  if (!formRef.value) return
+  if (!formRef.value || submitting.value) return
   if (!isEdit.value && !selectedFile.value) {
     ElMessage.warning('发布新题必须上传测试用例 .zip 压缩包！')
     return
   }
 
-  await formRef.value.validate(async (valid: boolean) => {
-    if (!valid) return
-    submitting.value = true
-    try {
-      // 核心：全部组装为 FormData，彻底解决 Content-Type 冲突
-      const formData = new FormData()
-      formData.append('title', form.title)
-      formData.append('description', form.description)
-      formData.append('timeLimitMs', String(form.timeLimitMs))
-      formData.append('memoryLimitMb', String(form.memoryLimitMb))
-      formData.append('isPublic', String(form.isPublic))
-      if (selectedFile.value) {
-        formData.append('file', selectedFile.value)
-      }
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
 
-      if (isEdit.value) {
-        await updateProblemApi(props.problemId!, formData)
-        ElMessage.success('题目修改成功！')
-      } else {
-        await createProblemApi(formData)
-        ElMessage.success('题目发布成功，测试点已自动解压就绪！')
-      }
-      visible.value = false
-      emit('success')
-    } finally {
-      submitting.value = false
+  submitting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('title', form.title)
+    formData.append('description', form.description)
+    formData.append('timeLimitMs', String(form.timeLimitMs))
+    formData.append('memoryLimitMb', String(form.memoryLimitMb))
+    formData.append('isPublic', String(form.isPublic))
+    if (selectedFile.value) {
+      formData.append('file', selectedFile.value)
     }
-  })
+
+    if (isEdit.value) {
+      await updateProblemApi(props.problemId!, formData)
+      ElMessage.success('题目修改成功！')
+    } else {
+      await createProblemApi(formData)
+      ElMessage.success('题目发布成功，测试点已自动解压就绪！')
+    }
+    visible.value = false
+    emit('success')
+  } catch {
+    // 错误由 request.ts 统一提示
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 

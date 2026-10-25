@@ -1,21 +1,35 @@
 <template>
   <div class="problem-list-container">
     <el-card class="box-card" shadow="never">
-      <!-- 顶部搜索工具栏 -->
+      <!-- 顶部多条件搜索工具栏 -->
       <div class="filter-bar">
-        <div class="search-input">
-          <el-input
-            v-model="keyword"
-            placeholder="输入题目标题搜索..."
-            prefix-icon="Search"
-            clearable
-            @clear="handleSearch"
-            @keyup.enter="handleSearch"
-          />
-        </div>
-        <el-button type="primary" icon="Search" @click="handleSearch">搜索</el-button>
-        <el-button icon="Refresh" @click="handleReset">重置</el-button>
-        <el-button type="success" icon="Plus" style="margin-left: auto;" @click="$router.push('/admin/problem/create')">创建新题目</el-button>
+        <el-input
+          v-model.number="queryParams.id"
+          placeholder="题号 ID (如 1001)"
+          clearable
+          style="width: 160px;"
+          @clear="handleSearch"
+          @keyup.enter="handleSearch"
+        />
+        <el-input
+          v-model.trim="queryParams.title"
+          placeholder="输入题目标题搜索..."
+          :prefix-icon="Search"
+          clearable
+          style="width: 240px;"
+          @clear="handleSearch"
+          @keyup.enter="handleSearch"
+        />
+        <el-input
+          v-model.trim="queryParams.author"
+          placeholder="按出题人搜索..."
+          clearable
+          style="width: 160px;"
+          @clear="handleSearch"
+          @keyup.enter="handleSearch"
+        />
+        <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+        <el-button :icon="Refresh" @click="handleReset">重置</el-button>
       </div>
 
       <!-- 题目数据表格 -->
@@ -27,6 +41,13 @@
         @row-click="goToDetail"
         row-class-name="clickable-row"
       >
+        <!-- 新增：当前用户做题状态列 -->
+        <el-table-column label="状态" width="70" align="center">
+          <template #default="{ row }">
+            <ProblemStatusBadge :status="row.userStatus" />
+          </template>
+        </el-table-column>
+
         <el-table-column prop="id" label="题号" width="100" align="center">
           <template #default="{ row }">
             <span class="problem-id">#{{ row.id }}</span>
@@ -64,15 +85,16 @@
         </el-table-column>
       </el-table>
 
-      <!-- 底部底部分页条 -->
+      <!-- 底部分页条 -->
       <div class="pagination-bar">
         <el-pagination
-          v-model:current-page="pageNum"
-          v-model:page-size="pageSize"
+          v-model:current-page="queryParams.pageNum"
+          v-model:page-size="queryParams.pageSize"
           :page-sizes="[10, 20, 50]"
+          background
           layout="total, sizes, prev, pager, next, jumper"
           :total="total"
-          @size-change="fetchProblems"
+          @size-change="handleSearch"
           @current-change="fetchProblems"
         />
       </div>
@@ -81,52 +103,59 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { Search, Refresh } from '@element-plus/icons-vue'
+import ProblemStatusBadge from '../../components/ProblemStatusBadge.vue'
 import { getProblemListApi } from '../../api/problem'
-import type { Problem } from '../../types'
+import type { Problem, ProblemQueryParams } from '../../types'
 
 const router = useRouter()
-
 const loading = ref(false)
 const problemList = ref<Problem[]>([])
 const total = ref(0)
-const pageNum = ref(1)
-const pageSize = ref(10)
-const keyword = ref('')
 
-// 获取题目列表
+const queryParams = reactive<ProblemQueryParams>({
+  pageNum: 1,
+  pageSize: 10,
+  id: undefined,
+  title: '',
+  author: '',
+  isPublic: 1
+})
+
 const fetchProblems = async () => {
   loading.value = true
   try {
     const data = await getProblemListApi({
-      pageNum: pageNum.value,
-      pageSize: pageSize.value,
-      keyword: keyword.value.trim() || undefined,
-      isPublic: 1 // 只获取公开题目
+      pageNum: queryParams.pageNum,
+      pageSize: queryParams.pageSize,
+      id: queryParams.id || undefined,
+      title: queryParams.title || undefined,
+      author: queryParams.author || undefined,
+      isPublic: 1
     })
     problemList.value = data.items
     total.value = data.total
-  } catch (error) {
-    // 错误由 request.ts 统一拦截提示
+  } catch {
   } finally {
     loading.value = false
   }
 }
 
-// 搜索与重置
 const handleSearch = () => {
-  pageNum.value = 1
+  queryParams.pageNum = 1
   fetchProblems()
 }
 
 const handleReset = () => {
-  keyword.value = ''
-  pageNum.value = 1
+  queryParams.id = undefined
+  queryParams.title = ''
+  queryParams.author = ''
+  queryParams.pageNum = 1
   fetchProblems()
 }
 
-// 跳转到做题详情页
 const goToDetail = (row: Problem) => {
   router.push(`/problems/${row.id}`)
 }
@@ -148,11 +177,9 @@ onMounted(() => {
 .filter-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 20px;
-}
-.search-input {
-  width: 280px;
 }
 .problem-id {
   font-weight: bold;

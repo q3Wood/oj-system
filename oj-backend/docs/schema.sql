@@ -21,11 +21,15 @@ CREATE TABLE IF NOT EXISTS `tb_problem` (
     `memory_limit_mb` INT NOT NULL DEFAULT 256 COMMENT '内存限制 (MB)',
     `author` VARCHAR(64) DEFAULT 'Admin' COMMENT '出题人',
     `is_public` TINYINT NOT NULL DEFAULT 1 COMMENT '是否公开: 1-公开, 0-比赛保密',
+    `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑软删除: 0-未删除, 1-已删除',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX `idx_is_public` (`is_public`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目元数据表';
+-- ALTER TABLE `tb_problem`
+--     ADD COLUMN `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑软删除: 0-未删除, 1-已删除';
+
 
 -- 3. 题解表 (增加 is_deleted)
 CREATE TABLE IF NOT EXISTS `tb_solution` (

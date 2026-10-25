@@ -3,21 +3,21 @@
     <!-- 1. 顶部牛客同款极简黑色导航栏 -->
     <div class="solve-navbar">
       <div class="nav-left">
-        <el-link :underline="false" icon="Back" style="color: #a8abb2; margin-right: 14px;" @click="goBackToContest">
+        <el-link :underline="false" :icon="Back" style="color: #a8abb2; margin-right: 14px;" @click="goBackToContest">
           比赛主页
         </el-link>
         <!-- 快速切题下拉框 -->
         <el-dropdown @command="switchProblem">
           <span class="problem-dropdown-btn">
-            <el-icon style="margin-right: 6px;"><Menu /></el-icon>
+            <el-icon style="margin-right: 6px;"><Menu/></el-icon>
             Problem {{ displayId }}: {{ currentProblem?.displayTitle }}
-            <el-icon style="margin-left: 6px;"><ArrowDown /></el-icon>
+            <el-icon style="margin-left: 6px;"><ArrowDown/></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item 
-                v-for="p in problemList" 
-                :key="p.displayId" 
+              <el-dropdown-item
+                v-for="p in problemList"
+                :key="p.displayId"
                 :command="p.displayId"
                 :disabled="p.displayId === displayId"
               >
@@ -29,8 +29,14 @@
       </div>
 
       <div class="nav-right">
+        <span class="auto-save-tip">已开启本地实时保存</span>
         <!-- 语言切换 -->
-        <el-select v-model="selectedLanguage" size="small" style="width: 110px; margin-right: 12px;">
+        <el-select
+          v-model="selectedLanguage"
+          size="small"
+          style="width: 115px; margin-right: 12px;"
+          @change="loadSavedCode"
+        >
           <el-option label="C++ (g++)" value="cpp" />
           <el-option label="C (gcc)" value="c" />
         </el-select>
@@ -39,17 +45,17 @@
           重置模板
         </el-button>
 
-        <!-- 牛客同款：我的提交记录抽屉入口 -->
+        <!-- 我的提交记录抽屉入口 -->
         <el-button size="small" :icon="Tickets" style="margin-right: 12px;" @click="openMySubmissionsDrawer">
           我的提交
         </el-button>
 
         <!-- 提交代码按钮 -->
-        <el-button 
-          type="success" 
-          size="small" 
-          :icon="VideoPlay" 
-          :loading="submitting" 
+        <el-button
+          type="success"
+          size="small"
+          :icon="VideoPlay"
+          :loading="submitting"
           @click="handleSubmit"
         >
           保存并提交
@@ -57,9 +63,9 @@
       </div>
     </div>
 
-    <!-- 2. 全屏双栏工作台 (锁死视口高度，消灭外层滚动条) -->
+    <!-- 2. 全屏双栏工作台 -->
     <div class="workbench-body">
-      <!-- 左半屏：题面描述 (独立滚动区) -->
+      <!-- 左半屏：题面描述 -->
       <div class="pane left-pane">
         <div class="pane-inner">
           <div class="problem-header-box">
@@ -69,22 +75,18 @@
               <el-tag type="warning" size="small">内存限制: {{ currentProblem?.memoryLimitMb }} MB</el-tag>
             </div>
           </div>
-          <!-- 题面 Markdown 正文 -->
-          <div class="markdown-body" v-html="renderedDescription"></div>
+          <!-- 复用通用 Markdown + KaTeX 题面组件 -->
+          <ProblemDescription :content="currentProblem?.description"/>
         </div>
       </div>
 
       <!-- 右半屏：Monaco Editor 满屏编辑器 -->
       <div class="pane right-pane">
-        <MonacoEditor
-          v-model="sourceCode"
-          :language="selectedLanguage"
-          theme="vs-dark"
-        />
+        <MonacoEditor :language="selectedLanguage" theme="vs-dark" v-model="sourceCode"/>
       </div>
     </div>
 
-    <!-- 3. 牛客同款：右侧滑出的“我的提交记录”抽屉 -->
+    <!-- 3. 右侧滑出的“我的提交记录”抽屉 -->
     <el-drawer
       v-model="drawerVisible"
       :title="`Problem ${displayId} - 我的提交记录`"
@@ -124,10 +126,10 @@
     <transition name="el-zoom-in-bottom">
       <div v-if="floatingCardVisible" class="floating-judge-card" :class="getFloatingCardClass()">
         <div class="card-left">
-          <el-icon v-if="isEvaluating" class="is-loading" :size="20"><Loading /></el-icon>
+          <el-icon v-if="isEvaluating" class="is-loading" :size="20"><Loading/></el-icon>
           <el-icon v-else :size="20">
-            <Check v-if="latestSubmission?.verdict === 'Accepted'" />
-            <Close v-else />
+            <Check v-if="isAccepted(latestSubmission?.verdict)"/>
+            <Close v-else/>
           </el-icon>
           <div class="card-info">
             <div class="card-status-title">
@@ -139,39 +141,38 @@
           </div>
         </div>
         <div class="card-right">
-          <el-button v-if="!isEvaluating" link :icon="VideoPlay" type="primary" size="small" @click="openReportDialog(latestSubmission)">
+          <el-button
+            v-if="!isEvaluating && latestSubmission"
+            link
+            :icon="VideoPlay"
+            type="primary"
+            size="small"
+            @click="openReportDialog(latestSubmission)"
+          >
             查看报告
           </el-button>
-          <el-button link :icon="Close" @click="floatingCardVisible = false"></el-button>
+          <el-button link :icon="Close" @click="floatingCardVisible = false" />
         </div>
       </div>
     </transition>
 
-    <!-- 5. 详细评测报告弹窗 -->
-    <!-- 统一复用评测报告弹窗 (带代码展示) -->
-<SubmissionDetailModal
-  v-model="reportDialogVisible"
-  :submission-id="currentReportSubId"
-/>
+    <!-- 5. 统一复用评测报告弹窗 -->
+    <SubmissionDetailModal :submission-id="currentReportSubId" v-model="reportDialogVisible"/>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Menu, ArrowDown, VideoPlay, Refresh, Loading, Check, Close, Tickets } from '@element-plus/icons-vue'
-import { marked } from 'marked'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Menu, ArrowDown, VideoPlay, Refresh, Loading, Check, Close, Tickets, Back } from '@element-plus/icons-vue'
 import MonacoEditor from '../../components/MonacoEditor.vue'
-import {
-  getContestProblemsApi,
-  getContestProblemDetailApi,
-  submitContestCodeApi
-} from '../../api/contest'
-import { getSubmissionListApi, getSubmissionDetailApi } from '../../api/submission'
+import ProblemDescription from '../../components/ProblemDescription.vue'
+import SubmissionDetailModal from '../../components/SubmissionDetailModal.vue'
+import { getContestProblemsApi, getContestProblemDetailApi } from '../../api/contest'
+import { submitCodeApi, getSubmissionListApi, getSubmissionDetailApi } from '../../api/submission'
 import { useUserStore } from '../../stores/user'
 import type { ContestProblem, Submission } from '../../types'
-import SubmissionDetailModal from '../../components/SubmissionDetailModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -185,28 +186,51 @@ const submitting = ref(false)
 const currentProblem = ref<ContestProblem | null>(null)
 const problemList = ref<ContestProblem[]>([])
 
-// 语言与编辑器
-const selectedLanguage = ref('cpp')
-const defaultTemplate = `#include <iostream>\nusing namespace std;\n\nint main() {\n    // 请在此处完成比赛答题\n    return 0;\n}\n`
-const sourceCode = ref(defaultTemplate)
+const CODE_TEMPLATES: Record<string, string> = {
+  cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // 请在此处完成比赛答题\n    return 0;\n}\n`,
+  c: `#include <stdio.h>\n\nint main() {\n    // 请在此处完成比赛答题\n    return 0;\n}\n`
+}
 
-// 浮窗与评测状态
+const selectedLanguage = ref('cpp')
+const sourceCode = ref(CODE_TEMPLATES.cpp)
+
+// 浮窗与评测轮询控制
 const floatingCardVisible = ref(false)
 const isEvaluating = ref(false)
 const latestSubmission = ref<Submission | null>(null)
 const reportDialogVisible = ref(false)
-// const selectedReport = ref<Submission | null>(null)
+const currentReportSubId = ref<number | null>(null)
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // 抽屉与提交记录
 const drawerVisible = ref(false)
 const drawerLoading = ref(false)
 const mySubmissions = ref<Submission[]>([])
 
-const renderedDescription = computed(() => {
-  return marked.parse(currentProblem.value?.description || '') as string
+// 本地代码自动缓存 Key
+const getStorageKey = () => {
+  const uid = userStore.userInfo?.id || 'guest'
+  const pid = currentProblem.value?.problemId || displayId.value
+  return `oj:code:${uid}:${pid}:${selectedLanguage.value}`
+}
+
+const loadSavedCode = () => {
+  const saved = localStorage.getItem(getStorageKey())
+  sourceCode.value = saved !== null ? saved : (CODE_TEMPLATES[selectedLanguage.value] || '')
+}
+
+watch(sourceCode, (newVal) => {
+  if (currentProblem.value) {
+    localStorage.setItem(getStorageKey(), newVal)
+  }
 })
 
-const currentReportSubId = ref<number | null>(null)
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
 const openReportDialog = (sub: Submission | null) => {
   if (!sub) return
@@ -214,40 +238,23 @@ const openReportDialog = (sub: Submission | null) => {
   reportDialogVisible.value = true
 }
 
-// const parsedDetails = computed<CaseDetail[]>(() => {
-//   if (!selectedReport.value?.judgeDetails) return []
-//   const d = selectedReport.value.judgeDetails
-//   if (typeof d === 'string') {
-//     try {
-//       const p = JSON.parse(d)
-//       return Array.isArray(p) ? p : []
-//     } catch {
-//       return []
-//     }
-//   }
-//   return Array.isArray(d) ? d : []
-// })
-
-// 获取单题详情
 const fetchProblemDetail = async () => {
   pageLoading.value = true
   try {
     currentProblem.value = await getContestProblemDetailApi(contestId, displayId.value)
-  } catch (e) {
-    ElMessage.error('无法读取题目，请检查比赛是否已开始！')
+    loadSavedCode()
+  } catch {
   } finally {
     pageLoading.value = false
   }
 }
 
-// 获取全场题目列表
 const fetchProblemList = async () => {
   try {
     problemList.value = await getContestProblemsApi(contestId)
-  } catch (e) {}
+  } catch {}
 }
 
-// 打开我的提交抽屉
 const openMySubmissionsDrawer = async () => {
   if (!userStore.token) {
     ElMessage.warning('请先登录查看提交记录！')
@@ -263,38 +270,39 @@ const openMySubmissionsDrawer = async () => {
       userId: userStore.userInfo?.id
     })
     mySubmissions.value = data.items
+  } catch {
   } finally {
     drawerLoading.value = false
   }
 }
 
-// // 打开评测详情弹窗
-// const openReportDialog = async (sub: Submission | null) => {
-//   if (!sub) return
-//   if (!sub.judgeDetails || sub.judgeDetails.length === 0) {
-//     try {
-//       sub = await getSubmissionDetailApi(sub.id)
-//     } catch (e) {}
-//   }
-//   selectedReport.value = sub
-//   reportDialogVisible.value = true
-// }
-
-// 快速切题
 const switchProblem = (newDisplayId: string) => {
   displayId.value = newDisplayId
   router.push(`/contests/${contestId}/problems/${newDisplayId}`)
 }
 
-const resetCodeTemplate = () => {
-  sourceCode.value = defaultTemplate
+const resetCodeTemplate = async () => {
+  try {
+    await ElMessageBox.confirm('确定要清空当前代码并恢复初始模板吗？', '重置确认', {
+      confirmButtonText: '确定重置',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    sourceCode.value = CODE_TEMPLATES[selectedLanguage.value] || ''
+    localStorage.removeItem(getStorageKey())
+    ElMessage.success('已恢复初始代码模板')
+  } catch {}
 }
 
 const goBackToContest = () => {
   router.push(`/contests/${contestId}`)
 }
 
-// 提交比赛代码
+const isAccepted = (verdict?: string) => {
+  return verdict === 'Accepted' || verdict === 'AC'
+}
+
+// 统一调用 submitCodeApi (携带 contestId)
 const handleSubmit = async () => {
   if (!userStore.token) {
     ElMessage.warning('请先登录再提交！')
@@ -302,44 +310,48 @@ const handleSubmit = async () => {
     return
   }
   if (!currentProblem.value) return
+  if (!sourceCode.value.trim()) {
+    ElMessage.warning('提交代码不能为空！')
+    return
+  }
 
+  stopPolling()
   submitting.value = true
   isEvaluating.value = true
   floatingCardVisible.value = true
 
   try {
-    const initial = await submitContestCodeApi(contestId, {
+    const initial = await submitCodeApi({
       problemId: currentProblem.value.problemId,
+      contestId: contestId,
       language: selectedLanguage.value,
       code: sourceCode.value
     })
 
     latestSubmission.value = initial
 
-    // 智能轮询
-    const timer = setInterval(async () => {
+    pollTimer = setInterval(async () => {
       try {
         const detail = await getSubmissionDetailApi(initial.id)
         latestSubmission.value = detail
 
         if (detail.verdict !== 'PENDING' && detail.verdict !== 'RUNNING') {
-          clearInterval(timer)
+          stopPolling()
           isEvaluating.value = false
           submitting.value = false
 
-          if (detail.verdict === 'Accepted') {
+          if (isAccepted(detail.verdict)) {
             ElMessage.success(`🎉 Problem ${displayId.value} 评测通过 (Accepted)！`)
           } else {
             ElMessage.error(`评测未通过: ${detail.verdict}`)
           }
         }
       } catch {
-        clearInterval(timer)
+        stopPolling()
         isEvaluating.value = false
         submitting.value = false
       }
     }, 800)
-
   } catch {
     submitting.value = false
     isEvaluating.value = false
@@ -349,61 +361,45 @@ const handleSubmit = async () => {
 
 const getFloatingCardClass = () => {
   if (isEvaluating.value) return 'card-pending'
-  if (latestSubmission.value?.verdict === 'Accepted') return 'card-accepted'
+  if (isAccepted(latestSubmission.value?.verdict)) return 'card-accepted'
   return 'card-failed'
 }
 
-// const getVerdictClass = (v: string) => {
-//   if (v === 'Accepted') return 'banner-ac'
-//   if (v === 'Compile Error') return 'banner-ce'
-//   return 'banner-wa'
-// }
-
 const getVerdictTagType = (v: string) => {
-  if (v === 'Accepted') return 'success'
+  if (isAccepted(v)) return 'success'
   if (v === 'Time Limit Exceeded' || v === 'Memory Limit Exceeded') return 'warning'
   return 'danger'
 }
 
-// const getErrorMessage = (sub: Submission | null) => {
-//   if (!sub || !sub.judgeDetails) return '无报错日志'
-//   let raw = sub.judgeDetails
-//   if (typeof raw === 'string') {
-//     try {
-//       const p = JSON.parse(raw)
-//       return typeof p === 'string' ? p : JSON.stringify(p, null, 2)
-//     } catch {
-//       return raw
-//     }
-//   }
-//   return JSON.stringify(raw, null, 2)
-// }
-
-watch(() => route.params.displayId, (newId) => {
-  if (newId) {
-    displayId.value = newId as string
-    fetchProblemDetail()
+watch(
+  () => route.params.displayId,
+  (newId) => {
+    if (newId) {
+      displayId.value = newId as string
+      fetchProblemDetail()
+    }
   }
-})
+)
 
 onMounted(() => {
   fetchProblemDetail()
   fetchProblemList()
 })
+
+onBeforeUnmount(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>
-/* 锁死视口高度：顶部 App.vue 导航栏占约 60px，内边距扣除，精准撑满剩余视口 */
 .contest-solve-page {
   height: calc(100vh - 108px);
   display: flex;
   flex-direction: column;
   background-color: #1e1e1e;
-  overflow: hidden; /* 彻底消灭最外层双重滚动条！ */
-  margin: -24px -40px; /* 抵消 App.vue main 的内边距 */
+  overflow: hidden;
+  margin: -24px -40px;
 }
-
-/* 顶部牛客同款极简黑色导航栏 */
 .solve-navbar {
   height: 48px;
   background-color: #252526;
@@ -417,6 +413,11 @@ onMounted(() => {
 .nav-left, .nav-right {
   display: flex;
   align-items: center;
+}
+.auto-save-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-right: 12px;
 }
 .problem-dropdown-btn {
   display: flex;
@@ -433,8 +434,6 @@ onMounted(() => {
 .problem-dropdown-btn:hover {
   background: #444444;
 }
-
-/* 双栏工作台：严格填满视口剩余高度 */
 .workbench-body {
   flex: 1;
   display: flex;
@@ -445,8 +444,6 @@ onMounted(() => {
   flex: 1;
   height: 100%;
 }
-
-/* 左侧题面：专属垂直滚动区，平滑顺畅滑到底 */
 .left-pane {
   background-color: #ffffff;
   border-right: 1px solid #e4e7ed;
@@ -454,7 +451,7 @@ onMounted(() => {
   box-sizing: border-box;
 }
 .pane-inner {
-  padding: 24px 32px 60px 32px; /* 底部留白充足，绝对不会被切断 */
+  padding: 24px 32px 60px 32px;
 }
 .problem-header-box {
   margin-bottom: 16px;
@@ -470,34 +467,10 @@ onMounted(() => {
   display: flex;
   gap: 10px;
 }
-
-/* Markdown 排版细节 */
-.markdown-body {
-  font-size: 15px;
-  line-height: 1.8;
-  color: #2c3e50;
-}
-.markdown-body :deep(h3) {
-  margin-top: 24px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid #eeeeee;
-  padding-bottom: 6px;
-  color: #303133;
-}
-.markdown-body :deep(pre) {
-  background-color: #f6f8fa;
-  border-radius: 6px;
-  padding: 14px;
-  overflow-x: auto;
-}
-
-/* 右侧满屏 Monaco 编辑器 */
 .right-pane {
   background-color: #1e1e1e;
   overflow: hidden;
 }
-
-/* 右下角悬浮通知卡片 */
 .floating-judge-card {
   position: fixed;
   right: 32px;
@@ -520,29 +493,4 @@ onMounted(() => {
 .card-pending { background-color: #ecf5ff; border: 1px solid #d9ecff; color: #409eff; }
 .card-accepted { background-color: #f0f9eb; border: 1px solid #e1f3d8; color: #67c23a; }
 .card-failed { background-color: #fef0f0; border: 1px solid #fde2e2; color: #f56c6c; }
-
-/* 弹窗与终端样式 */
-.result-banner {
-  padding: 16px 24px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.verdict-text { font-size: 24px; font-weight: bold; }
-.stats-text { display: flex; gap: 20px; font-size: 14px; }
-.banner-ac { background-color: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.banner-wa { background-color: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.banner-ce { background-color: #f4f4f5; color: #909399; border: 1px solid #e9e9eb; }
-.error-terminal {
-  background-color: #1e1e1e;
-  color: #f56c6c;
-  padding: 14px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 13px;
-  max-height: 250px;
-  overflow-y: auto;
-}
 </style>

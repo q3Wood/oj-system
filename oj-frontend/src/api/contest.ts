@@ -1,68 +1,54 @@
 import request from '../utils/request'
-import type { Contest, ContestProblem, ContestRank, PageResult, Submission } from '../types'
+import type { Contest, ContestProblem, ContestRank, PageResult, ContestQueryParams } from '../types'
 
-// 5.1 获取公开比赛列表 (分页)
-export const getContestListApi = (params: { pageNum?: number; pageSize?: number }) => {
-  return request.get<any, PageResult<Contest>>('/contests', { params })
+// 4.1 分页获取比赛列表 (前台与后台管理合一) -> GET /api/contest/list
+export const getContestListApi = (params?: ContestQueryParams) => {
+  return request.get<any, PageResult<Contest>>('/contest/list', { params })
 }
 
-// 5.2 获取单场比赛详情
+// 4.2 获取单场比赛详情 (自带 isRegistered 等统计状态) -> GET /api/contest/{id}
 export const getContestDetailApi = (id: number) => {
-  return request.get<any, Contest>(`/contests/${id}`)
+  return request.get<any, Contest>(`/contest/${id}`)
 }
 
-// 5.3 获取比赛题目列表 (未开赛时后端会自动拦截报错)
+// 4.3 获取比赛题目列表 -> GET /api/contest/{id}/problems
 export const getContestProblemsApi = (id: number) => {
-  return request.get<any, ContestProblem[]>(`/contests/${id}/problems`)
+  return request.get<any, ContestProblem[]>(`/contest/${id}/problems`)
 }
 
-// 5.4 获取比赛单题详情
+// 4.4 获取比赛单题题面详情 -> GET /api/contest/{id}/problems/{displayId}
 export const getContestProblemDetailApi = (id: number, displayId: string) => {
-  return request.get<any, ContestProblem>(`/contests/${id}/problems/${displayId}`)
+  return request.get<any, ContestProblem>(`/contest/${id}/problems/${displayId}`)
 }
 
-// 5.5 比赛内提交代码 (打上 contest_id 异步评测)
-export const submitContestCodeApi = (contestId: number, data: { problemId: number; language: string; code: string }) => {
-  return request.post<any, Submission>(`/contests/${contestId}/submissions`, data)
-}
-
-// 5.6 获取比赛实时 ICPC 榜单 (滚榜数据)
+// 4.5 获取比赛实时 ICPC 榜单 -> GET /api/contest/{id}/ranklist
 export const getContestRanklistApi = (id: number) => {
-  return request.get<any, ContestRank[]>(`/contests/${id}/ranklist`)
+  return request.get<any, ContestRank[]>(`/contest/${id}/ranklist`)
 }
 
-// 5.7 报名比赛
+// 4.6 用户报名参加比赛 -> POST /api/contest/{id}/register
 export const registerContestApi = (id: number) => {
-  return request.post<any, void>(`/contests/${id}/register`)
+  return request.post<any, void>(`/contest/${id}/register`)
 }
 
-// 5.8 查询是否已报名
-export const getContestRegisterStatusApi = (id: number) => {
-  return request.get<any, boolean>(`/contests/${id}/register-status`)
-}
+// ==================== 以下为后台管理接口 (/contest/admin/**) ====================
 
-// 管理员获取全量比赛列表
-export const getAdminContestListApi = (params: { pageNum?: number; pageSize?: number; keyword?: string }) => {
-  return request.get<any, PageResult<any>>('/admin/contests', { params })
-}
-
-// 管理员创建比赛
+// 4.7 管理员创建比赛 -> POST /api/contest/admin
 export const createContestApi = (data: any) => {
-  return request.post<any, any>('/admin/contests', data)
+  return request.post<any, Contest>('/contest/admin', data)
 }
 
-// 管理员编辑比赛
+// 4.8 管理员编辑比赛 -> PUT /api/contest/admin/{id}
 export const updateContestApi = (id: number, data: any) => {
-  return request.put<any, void>(`/admin/contests/${id}`, data)
+  return request.put<any, void>(`/contest/admin/${id}`, data)
 }
 
-// 管理员删除比赛
+// 4.9 管理员删除比赛 -> DELETE /api/contest/admin/{id}
 export const deleteContestApi = (id: number) => {
-  return request.delete<any, void>(`/admin/contests/${id}`)
+  return request.delete<any, void>(`/contest/admin/${id}`)
 }
 
-// 赛后一键公开题目
+// 4.10 赛后一键公开保密题到公共题库 -> POST /api/contest/admin/{id}/publish-problems
 export const publishContestProblemsApi = (id: number) => {
-  return request.post<any, void>(`/admin/contests/${id}/publish-problems`)
+  return request.post<any, void>(`/contest/admin/${id}/publish-problems`)
 }
-

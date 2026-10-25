@@ -1,5 +1,6 @@
 package com.oj.backend.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -14,9 +15,11 @@ public class ProblemUpdateDTO {
     private String description;
 
     @NotNull(message = "时间限制不能为空")
+    @Min(value = 100, message = "时间限制不能低于 100ms")
     private Integer timeLimitMs;
 
     @NotNull(message = "内存限制不能为空")
+    @Min(value = 16, message = "内存限制不能低于 16MB")
     private Integer memoryLimitMb;
 
     // 可选更新可见性 (1-公开, 0-保密)

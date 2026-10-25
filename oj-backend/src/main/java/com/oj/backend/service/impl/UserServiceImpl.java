@@ -5,18 +5,23 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.oj.backend.common.BusinessException;
 import com.oj.backend.common.PageResult;
 import com.oj.backend.common.UserContext;
+import com.oj.backend.dto.UserQueryDTO;
 import com.oj.backend.entity.User;
 import com.oj.backend.mapper.UserMapper;
 import com.oj.backend.service.UserService;
 import com.oj.backend.utils.JwtUtil;
+import com.oj.backend.vo.UserVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -25,6 +30,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    // 统一管理 Redis Token 前缀，避免魔法字符串散落各处
+    private static final String REDIS_TOKEN_PREFIX = "login:token:";
 
     // 密码加密器
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -59,38 +67,62 @@ public class UserServiceImpl implements UserService {
     @Override
     public String login(String username, String password) {
         User user = findByUsername(username);
-        if (user == null) {
-            throw new BusinessException("用户名或密码错误！");
-        }
-
-        if (!passwordEncoder.matches(password, user.getPassword())) {
+        if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
             throw new BusinessException("用户名或密码错误！");
         }
 
         String token = JwtUtil.createToken(user.getId(), user.getUsername(), user.getRole());
-        String redisKey = "login:token:" + user.getId();
-        // 真实发放签名 Token！
+        String redisKey = REDIS_TOKEN_PREFIX + user.getId();
+        // 真实发放签名 Token，有效期 1 天
         stringRedisTemplate.opsForValue().set(redisKey, token, 1, TimeUnit.DAYS);
         return token;
     }
 
     @Override
-    public PageResult<User> listUsers(Integer pageNum, Integer pageSize, String keyword) {
+    public UserVO getUserInfoById(Long userId) {
+        if (userId == null) {
+            throw new BusinessException("用户未登录！");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在！");
+        }
+        return UserVO.fromEntity(user);
+    }
+
+    @Override
+    public void logout(Long userId) {
+        if (userId != null) {
+            stringRedisTemplate.delete(REDIS_TOKEN_PREFIX + userId);
+        }
+    }
+
+    @Override
+    public PageResult<UserVO> listUsers(UserQueryDTO queryDTO) {
         // 核心校验：必须是 ROOT 权限！
         if (!"ROOT".equalsIgnoreCase(UserContext.getRole())) {
             throw new BusinessException("权限不足！只有 ROOT 超级管理员有权查看全员列表。");
         }
 
-        Page<User> page = new Page<>(pageNum, pageSize);
+        Page<User> page = new Page<>(queryDTO.getPageNum(), queryDTO.getPageSize());
+
+        String keyword = queryDTO.getKeyword();
+        String role = queryDTO.getRole();
+
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
                 .select(User::getId, User::getUsername, User::getRole, User::getCreatedAt)
                 .like(StringUtils.hasText(keyword), User::getUsername, keyword)
+                .eq(StringUtils.hasText(role), User::getRole, role) // 新增：按角色精准筛选
                 .orderByAsc(User::getId);
 
         userMapper.selectPage(page, wrapper);
-        return new PageResult<>(page.getTotal(), page.getRecords());
 
+        // 将 Entity 列表转换为脱敏的 VO 列表
+        List<UserVO> voList = page.getRecords().stream()
+                .map(UserVO::fromEntity)
+                .toList();
 
+        return new PageResult<>(page.getTotal(), voList);
     }
 
     @Override
@@ -121,8 +153,17 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("安全限制：不得篡改其他 ROOT 根用户的权限！");
         }
 
+        // 角色未发生变化则直接返回，避免无意义写库和误踢下线
+        if (newRole.equalsIgnoreCase(targetUser.getRole())) {
+            return;
+        }
+
         targetUser.setRole(newRole);
         userMapper.updateById(targetUser);
-        System.out.println(">>> [Security] ROOT 用户 #" + currentUserId + " 将用户 #" + targetUserId + " 的角色调整为: " + newRole);
+
+        // 【关键安全闭环】：销毁目标用户的 Redis Token，强制其重新登录以刷新 JWT 内的角色声明
+        stringRedisTemplate.delete(REDIS_TOKEN_PREFIX + targetUserId);
+
+        log.info(">>> [Security] ROOT 用户 #{} 将用户 #{} 的角色调整为: {}，并已强制刷新其会话", currentUserId, targetUserId, newRole);
     }
 }

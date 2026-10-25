@@ -9,6 +9,15 @@ spring:
     url: jdbc:mysql://localhost:3306/oj_db?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
     username: root
     password: "123456"
+  servlet:
+    multipart:
+      max-file-size: 200MB      # 调大至 200MB，支持大型测试数据集压缩包
+      max-request-size: 200MB
+
+  # 全局统一 JSON 时间格式与东八区时区
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
 
   data:
     redis:
@@ -16,10 +25,15 @@ spring:
       port: 6379
       timeout: 3000ms
 
-# ?????
+# 日志输出配置：既在控制台打印，也自动保存到服务器的 logs/oj-backend.log 文件中
+logging:
+  file:
+    name: ./logs/oj-backend.log
+  level:
+    com.oj.backend: info
+
+# 评测机核心路径配置
 oj:
   judge:
-    # ?????
     binary-path: "../core-judge/build/core-judge"
-    # ??????
     problems-dir: "../core-judge/data/problems"
