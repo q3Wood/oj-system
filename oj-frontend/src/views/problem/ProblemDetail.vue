@@ -184,17 +184,17 @@ const getVerdictTagType = (verdict: string) => {
   return 'danger'
 }
 
-const getStatusLabel = (status?: string) => {
-  if (status === 'SOLVED') return '已通过'
-  if (status === 'ATTEMPTED') return '尝试过'
-  return '未开始'
-}
+// const getStatusLabel = (status?: string) => {
+//   if (status === 'SOLVED') return '已通过'
+//   if (status === 'ATTEMPTED') return '尝试过'
+//   return '未开始'
+// }
 
-const getStatusTextClass = (status?: string) => {
-  if (status === 'SOLVED') return 'text-solved'
-  if (status === 'ATTEMPTED') return 'text-attempted'
-  return 'text-none'
-}
+// const getStatusTextClass = (status?: string) => {
+//   if (status === 'SOLVED') return 'text-solved'
+//   if (status === 'ATTEMPTED') return 'text-attempted'
+//   return 'text-none'
+// }
 
 onMounted(() => {
   fetchProblemDetail()

@@ -28,3 +28,4 @@ oj-frontend/.vite/
 # === 日志与测试临时文件 ===
 *.log
 /tmp/*
+logs/
