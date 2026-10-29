@@ -3,7 +3,7 @@
     <!-- 1. 顶部牛客同款极简黑色导航栏 -->
     <div class="solve-navbar">
       <div class="nav-left">
-        <el-link :underline="false" :icon="Back" style="color: #a8abb2; margin-right: 14px;" @click="goBackToContest">
+        <el-link underline="never" :icon="Back" style="color: #a8abb2; margin-right: 14px;" @click="goBackToContest">
           比赛主页
         </el-link>
         <!-- 快速切题下拉框 -->
@@ -393,12 +393,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .contest-solve-page {
-  height: calc(100vh - 108px);
+  height: calc(100% + 40px);
   display: flex;
   flex-direction: column;
   background-color: #1e1e1e;
   overflow: hidden;
-  margin: -24px -40px;
+  margin: -20px -32px;
 }
 .solve-navbar {
   height: 48px;

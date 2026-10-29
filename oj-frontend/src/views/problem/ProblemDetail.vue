@@ -203,9 +203,10 @@ onMounted(() => {
 
 <style scoped>
 .workbench-container {
-  height: calc(100vh - 110px);
-  max-width: 1600px;
-  margin: 0 auto;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
 }
 .workbench-row, .pane-col {
   height: 100%;
@@ -215,6 +216,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   border-radius: 8px;
+  box-sizing: border-box;
 }
 :deep(.el-card__body) {
   flex: 1;
@@ -250,10 +252,6 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 500;
 }
-.text-solved { color: #67c23a; }
-.text-attempted { color: #e6a23c; }
-.text-none { color: #909399; }
-
 .tabs-row {
   display: flex;
   justify-content: space-between;

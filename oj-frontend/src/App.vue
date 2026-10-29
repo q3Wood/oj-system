@@ -5,7 +5,7 @@
         <el-icon :size="24" color="#409eff" style="margin-right: 8px;"><Platform /></el-icon>
         <span>Core OJ</span>
       </div>
-      
+
       <el-menu mode="horizontal" :router="true" :default-active="$route.path" class="menu">
         <el-menu-item index="/problems">题库大厅</el-menu-item>
         <el-menu-item index="/contests">竞赛</el-menu-item>
@@ -13,7 +13,6 @@
       </el-menu>
 
       <div class="user-box">
-        <!-- 响应式绑定 Pinia，一旦登录成功自动变成头像 -->
         <template v-if="userStore.token">
           <el-dropdown>
             <span class="user-dropdown">
@@ -24,14 +23,13 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                 <!-- 仅对 ADMIN 和 ROOT 角色展示后台入口 -->
-                        <el-dropdown-item 
-                          v-if="userStore.userInfo?.role === 'ADMIN' || userStore.userInfo?.role === 'ROOT'" 
-                          :icon="Setting" 
-                          @click="$router.push('/admin/problems')"
-                        >
-                          进入管理后台
-                        </el-dropdown-item>
+                <el-dropdown-item
+                  v-if="userStore.userInfo?.role === 'ADMIN' || userStore.userInfo?.role === 'ROOT'"
+                  :icon="Setting"
+                  @click="$router.push('/admin/problems')"
+                >
+                  进入管理后台
+                </el-dropdown-item>
                 <el-dropdown-item :icon="SwitchButton" @click="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -70,18 +68,35 @@ const logout = async () => {
 }
 </script>
 
+<!-- 1. 全局基础样式：彻底干掉浏览器默认的 body 8px 边距和最外层双滚动条 -->
+<style>
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+</style>
+
+<!-- 2. 布局组件局部样式 -->
 <style scoped>
 .layout-container {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   background-color: #f5f7fa;
 }
 .header {
+  height: 60px;
   background-color: #fff;
   border-bottom: 1px solid #dcdfe6;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 40px;
+  flex-shrink: 0;
 }
 .logo {
   display: flex;
@@ -103,6 +118,11 @@ const logout = async () => {
   font-weight: 500;
 }
 .main {
-  padding: 24px 40px;
+  flex: 1;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 32px;
+  box-sizing: border-box;
 }
 </style>

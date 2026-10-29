@@ -82,7 +82,9 @@ const getBreadcrumbTitle = () => {
 
 <style scoped>
 .admin-container {
-  height: 100vh;
+  /* 精准抵消外层 .main 的 padding: 20px 32px，严丝合缝铺满剩余全屏，绝不超出 1 像素 */
+  height: calc(100% + 40px);
+  margin: -20px -32px;
   overflow: hidden;
 }
 .admin-aside {
@@ -90,6 +92,7 @@ const getBreadcrumbTitle = () => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 .aside-logo {
   height: 60px;
@@ -101,16 +104,19 @@ const getBreadcrumbTitle = () => {
   font-weight: bold;
   cursor: pointer;
   background-color: #2b2f3a;
+  flex-shrink: 0;
 }
 .admin-menu {
   border-right: none;
   flex: 1;
+  overflow-y: auto;
 }
 .admin-main-container {
   height: 100%;
   background-color: #f0f2f5;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .admin-header {
   height: 60px;
@@ -120,6 +126,7 @@ const getBreadcrumbTitle = () => {
   justify-content: space-between;
   align-items: center;
   padding: 0 24px;
+  flex-shrink: 0;
 }
 .header-right {
   display: flex;
@@ -131,7 +138,9 @@ const getBreadcrumbTitle = () => {
   color: #303133;
 }
 .admin-content {
+  flex: 1;
   padding: 24px;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 </style>
