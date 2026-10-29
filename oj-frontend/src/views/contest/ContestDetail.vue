@@ -4,7 +4,7 @@
     <div class="contest-hero-banner">
       <div class="banner-inner">
         <div class="breadcrumb-nav">
-          <el-link :underline="false" :icon="Back" style="color: #909399;" @click="$router.push('/contests')">
+          <el-link underline="never" :icon="Back" style="color: #909399;" @click="$router.push('/contests')">
             赛事大厅
           </el-link>
           <span class="sep">/</span>
@@ -108,7 +108,7 @@
                 <template #default="{ row }">
                   <el-link
                     type="primary"
-                    :underline="false"
+                    underline="never"
                     class="problem-link"
                     @click="openProblemInNewTab(row.displayId)"
                   >

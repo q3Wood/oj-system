@@ -7,7 +7,7 @@
           <template #header>
             <div class="problem-meta-header">
               <div class="breadcrumb-bar">
-                <el-link :underline="false" :icon="Back" @click="$router.push('/problems')">
+                <el-link underline="never" :icon="Back" @click="$router.push('/problems')">
                   返回题库列表
                 </el-link>
               </div>

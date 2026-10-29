@@ -61,7 +61,7 @@
           <template #default="{ row }">
             <el-link
               type="primary"
-              :underline="false"
+              underline="never"
               style="display: inline-block; text-align: left;"
               @click="$router.push(`/problems/${row.problemId}`)"
             >
