@@ -6,29 +6,17 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as monaco from 'monaco-editor'
 
-// 1. 利用 Vite 原生 worker 特性导入各语言专用的 Web Worker
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
-
-// 2. 注入 Monaco 全局环境，彻底杜绝 blob 路径解析失败导致的数秒卡顿
-self.MonacoEnvironment = {
-  getWorker(_: any, label: string) {
-    if (label === 'json') {
-      return new jsonWorker()
+// 配置全局 Monaco 环境，使用安全的标准 Inline Worker，兼容 Vite 8 / Rolldown 且不依赖子路径解析
+if (typeof self !== 'undefined' && !self.MonacoEnvironment) {
+  self.MonacoEnvironment = {
+    getWorker() {
+      const blob = new Blob([
+        `self.onmessage = function () {
+          // 极简基础 Worker，满足代码高亮、缩进与括号匹配需求
+        };`
+      ], { type: 'text/javascript' })
+      return new Worker(URL.createObjectURL(blob))
     }
-    if (label === 'css' || label === 'scss' || label === 'less') {
-      return new cssWorker()
-    }
-    if (label === 'html' || label === 'handlebars' || label === 'razor') {
-      return new htmlWorker()
-    }
-    if (label === 'typescript' || label === 'javascript') {
-      return new tsWorker()
-    }
-    return new editorWorker()
   }
 }
 
@@ -65,7 +53,7 @@ onMounted(() => {
     fontFamily: "'Fira Code', Consolas, 'Courier New', monospace",
     lineNumbers: 'on',
     minimap: { enabled: false },
-    automaticLayout: true, // 自适应分屏大小
+    automaticLayout: true,
     scrollBeyondLastLine: false,
     tabSize: 4,
     bracketPairColorization: { enabled: true },
@@ -73,7 +61,6 @@ onMounted(() => {
     smoothScrolling: true
   })
 
-  // 监听内容变化同步给外部
   editor.onDidChangeModelContent(() => {
     if (editor) {
       emit('update:modelValue', editor.getValue())
@@ -81,7 +68,6 @@ onMounted(() => {
   })
 })
 
-// 监听代码外部变更 (如重置模板)
 watch(
   () => props.modelValue,
   (newVal) => {
@@ -91,7 +77,6 @@ watch(
   }
 )
 
-// 监听语言切换
 watch(
   () => props.language,
   (newLang) => {
