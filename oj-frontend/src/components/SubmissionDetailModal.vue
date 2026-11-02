@@ -137,15 +137,53 @@ watch(
 //     ElMessage.warning('复制失败，请手动选择复制')
 //   }
 // }
+// const copyCode = async () => {
+//   if (!submission.value?.code) return
+//   try {
+//     // 1. 先检查 clipboard 对象是否存在
+//     console.log('Clipboard API 对象:', navigator.clipboard)
+//     await navigator.clipboard.writeText(submission.value.code)
+//     ElMessage.success('代码已复制到剪贴板')
+//   } catch (err) {
+//     // 2. 打印具体的错误原因
+//     console.error('复制失败的具体原因:', err)
+//     ElMessage.warning('复制失败，请手动选择复制')
+//   }
+// }
 const copyCode = async () => {
-  if (!submission.value?.code) return
+  const text = submission.value?.code
+  if (!text) return
+
   try {
-    // 1. 先检查 clipboard 对象是否存在
-    console.log('Clipboard API 对象:', navigator.clipboard)
-    await navigator.clipboard.writeText(submission.value.code)
+    // 1. 如果是 HTTPS 或 localhost，走现代 API
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 2. 如果是 HTTP + IP 访问，自动走 textarea 降级方案
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      // 设为只读防止移动端弹出软键盘，并移出可视区域
+      textArea.setAttribute('readonly', '')
+      textArea.style.position = 'fixed'
+      textArea.style.top = '-9999px'
+      textArea.style.left = '-9999px'
+      textArea.style.opacity = '0'
+      
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      // 显式选中全部字符，防止 el-dialog 焦点拦截导致未选中文本
+      textArea.setSelectionRange(0, textArea.value.length)
+      
+      const success = document.execCommand('copy')
+      document.body.removeChild(textArea)
+      
+      if (!success) {
+        throw new Error('execCommand 返回 false')
+      }
+    }
     ElMessage.success('代码已复制到剪贴板')
   } catch (err) {
-    // 2. 打印具体的错误原因
     console.error('复制失败的具体原因:', err)
     ElMessage.warning('复制失败，请手动选择复制')
   }
