@@ -39,9 +39,15 @@ CompileResult Compiler::build(const CompileConfig& config) {
         // 构造编译参数
         std::vector<std::string> args_str;
         if (config.lang == "cpp") {
-            args_str = {"g++", "-O2", "-std=c++17", config.src_path, "-o", config.dest_exe_path};
+            args_str = {
+                "g++", "-O2", "-std=c++17", "-Wno-unused-result", "-DONLINE_JUDGE",
+                config.src_path, "-o", config.dest_exe_path, "-lm"
+            };
         } else if (config.lang == "c") {
-            args_str = {"gcc", "-O2", config.src_path, "-o", config.dest_exe_path};
+            args_str = {
+                "gcc", "-O2", "-std=c11", "-Wno-unused-result", "-DONLINE_JUDGE",
+                config.src_path, "-o", config.dest_exe_path, "-lm"
+            };
         } else {
             std::cerr << "Unsupported language: " << config.lang << "\n";
             _exit(1);
