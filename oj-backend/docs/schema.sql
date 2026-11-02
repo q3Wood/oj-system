@@ -131,3 +131,27 @@ CREATE TABLE IF NOT EXISTS `tb_contest_user` (
 INSERT INTO `tb_user` (`id`, `username`, `password`, `role`)
 VALUES (1, 'root', '$2a$10$dK5j9o5vM9m8f5r2y5U2Vu0K5Q2j6K7R9xL0s5w8z1Y2A3B4C5D6E', 'ROOT')
     ON DUPLICATE KEY UPDATE `username` = VALUES(`username`);
+
+
+USE `oj_db`;
+
+-- 8. AI 代码诊断报告表
+CREATE TABLE IF NOT EXISTS `tb_ai_analysis` (
+                                                `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                                `submission_id` BIGINT NOT NULL UNIQUE COMMENT '评测提交记录ID (对应 tb_submission.id)',
+                                                `user_id` BIGINT NOT NULL COMMENT '用户ID (对应 tb_user.id)',
+                                                `problem_id` BIGINT NOT NULL COMMENT '题目ID',
+                                                `judge_status` VARCHAR(32) NOT NULL COMMENT '评测状态: Accepted / Wrong Answer / TLE 等',
+                                                `congratulation` VARCHAR(255) DEFAULT NULL COMMENT 'AI鼓励语/总评大标题',
+                                                `method_analysis` JSON DEFAULT NULL COMMENT '方法板块结构体 (当前方法/推荐方法/思考题)',
+                                                `efficiency_analysis` JSON DEFAULT NULL COMMENT '运行效率板块结构体 (时空复杂度/优化建议)',
+                                                `style_analysis` JSON DEFAULT NULL COMMENT '代码风格板块结构体 (可读性/结构/改进建议)',
+                                                `raw_report` TEXT DEFAULT NULL COMMENT 'AI返回的完整原始输出 (兜底备份)',
+                                                `model_name` VARCHAR(64) NOT NULL DEFAULT 'deepseek-chat' COMMENT '大模型型号',
+                                                `token_cost` INT NOT NULL DEFAULT 0 COMMENT '消耗Token总量',
+                                                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                                `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                                PRIMARY KEY (`id`),
+                                                KEY `idx_user_id` (`user_id`),
+                                                KEY `idx_problem_id` (`problem_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 代码诊断与评审报告表';

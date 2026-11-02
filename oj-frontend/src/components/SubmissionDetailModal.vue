@@ -128,16 +128,28 @@ watch(
   }
 )
 
+// const copyCode = async () => {
+//   if (!submission.value?.code) return
+//   try {
+//     await navigator.clipboard.writeText(submission.value.code)
+//     ElMessage.success('代码已复制到剪贴板')
+//   } catch {
+//     ElMessage.warning('复制失败，请手动选择复制')
+//   }
+// }
 const copyCode = async () => {
   if (!submission.value?.code) return
   try {
+    // 1. 先检查 clipboard 对象是否存在
+    console.log('Clipboard API 对象:', navigator.clipboard)
     await navigator.clipboard.writeText(submission.value.code)
     ElMessage.success('代码已复制到剪贴板')
-  } catch {
+  } catch (err) {
+    // 2. 打印具体的错误原因
+    console.error('复制失败的具体原因:', err)
     ElMessage.warning('复制失败，请手动选择复制')
   }
 }
-
 const handleClosed = () => {
   submission.value = null
 }

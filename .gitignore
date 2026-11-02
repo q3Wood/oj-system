@@ -29,3 +29,4 @@ oj-frontend/.vite/
 *.log
 /tmp/*
 logs/
+oj-agent/.env

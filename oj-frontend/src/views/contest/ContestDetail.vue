@@ -369,20 +369,36 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .nowcoder-contest-container {
-  min-height: calc(100vh - 110px);
+  /* 抵消 App.vue 中 .main 的 padding: 20px 32px，严丝合缝铺满 */
+  margin: -20px -32px;
+  min-height: calc(100% + 40px);
   background-color: #ffffff;
-  margin: -24px -40px;
+  display: flex;
+  flex-direction: column;
 }
+
+/* ================= 1. 顶部深色 Banner ================= */
 .contest-hero-banner {
+  width: 100%;
   background: linear-gradient(135deg, #1f2329 0%, #2d323c 100%);
   color: #fff;
-  padding: 24px 48px;
+  padding: 24px 0; /* 左右 padding 交给内部容器统一控制，确保三层绝对对齐！ */
   border-bottom: 1px solid #3d4450;
+  flex-shrink: 0;
 }
-.banner-inner {
-  max-width: 1400px;
+
+/* 三层共用同一套居中与左右内边距基准线：1360px + 左右 40px */
+.banner-inner,
+.nav-inner,
+.contest-body-wrap {
+  max-width: 1360px;
+  width: 100%;
   margin: 0 auto;
+  padding-left: 40px;
+  padding-right: 40px;
+  box-sizing: border-box;
 }
+
 .breadcrumb-nav {
   display: flex;
   align-items: center;
@@ -460,19 +476,21 @@ onBeforeUnmount(() => {
   padding: 10px 20px;
   border-radius: 8px;
 }
+
+/* ================= 2. 标签导航栏 ================= */
 .contest-tab-nav {
+  width: 100%;
   background-color: #fff;
   border-bottom: 1px solid #e4e7ed;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
 }
 .nav-inner {
-  max-width: 1400px;
-  margin: 0 auto;
   display: flex;
-  padding: 0 48px;
+  gap: 32px; /* 用 gap 代替左右 padding，让第一个标签与上方大标题左边缘完全垂直对齐！ */
 }
 .tab-item {
-  padding: 16px 24px;
+  padding: 16px 4px;
   font-size: 15px;
   font-weight: 500;
   color: #606266;
@@ -488,14 +506,16 @@ onBeforeUnmount(() => {
   border-bottom-color: #409eff;
   font-weight: bold;
 }
+
+/* ================= 3. 主体内容区域 ================= */
 .contest-body-wrap {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 32px 48px;
+  padding-top: 28px;
+  padding-bottom: 32px;
   background-color: #ffffff;
+  flex: 1;
 }
 .content-main-area {
-  min-height: 480px;
+  width: 100%;
 }
 .problem-display-id {
   font-size: 16px;
