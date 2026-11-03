@@ -56,7 +56,8 @@
 
         <el-table-column prop="title" label="题目名称" min-width="250">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" class="problem-title">
+            <!-- 把 :underline="false" 改为 underline="never" -->
+            <el-link type="primary" underline="never" class="problem-title">
               {{ row.title }}
             </el-link>
           </template>
@@ -162,6 +163,12 @@ const goToDetail = (row: Problem) => {
 
 onMounted(() => {
   fetchProblems()
+  // 新增：进入列表页 1 秒后，在后台静默预加载重型编辑器组件和详情页组件
+  setTimeout(() => {
+    import('../../components/MonacoEditor.vue')
+    import('../../components/CodeWorkspace.vue')
+    import('../../components/ProblemDescription.vue')
+  }, 1000)
 })
 </script>
 

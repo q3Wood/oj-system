@@ -76,7 +76,10 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, Check, Close, Refresh, VideoPlay } from '@element-plus/icons-vue'
-import MonacoEditor from './MonacoEditor.vue'
+// import MonacoEditor from './MonacoEditor.vue'
+// ✅ 替换为异步引入写法（点击题目 0 秒瞬跳页面，不阻塞路由）：
+import { defineAsyncComponent } from 'vue'
+const MonacoEditor = defineAsyncComponent(() => import('./MonacoEditor.vue')) // 保持你原本的相对路径不变
 import { submitCodeApi, getSubmissionDetailApi } from '../api/submission'
 import { useUserStore } from '../stores/user'
 import type { Submission } from '../types'
