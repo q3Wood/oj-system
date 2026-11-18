@@ -30,3 +30,5 @@ oj-frontend/.vite/
 /tmp/*
 logs/
 oj-agent/.env
+oj-agent/data/oj_rag_db/
+oj-agent/Dockerfile
