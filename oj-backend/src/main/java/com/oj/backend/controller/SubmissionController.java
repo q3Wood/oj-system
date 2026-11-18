@@ -4,7 +4,9 @@ import com.oj.backend.common.PageResult;
 import com.oj.backend.common.Result;
 import com.oj.backend.dto.SubmissionQueryDTO;
 import com.oj.backend.dto.SubmitDTO;
+import com.oj.backend.service.AiCoachService;
 import com.oj.backend.service.SubmissionService;
+import com.oj.backend.vo.AiAnalysisReportVO;
 import com.oj.backend.vo.SubmissionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,13 +15,16 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "提交与评测模块", description = "代码提交、结果回溯与提交大厅接口")
+@Tag(name = "提交与评测模块", description = "代码提交、结果回溯、提交大厅与AI代码诊断接口")
 @RestController
 @RequestMapping("/api/submission")
 public class SubmissionController {
 
     @Autowired
     private SubmissionService submissionService;
+
+    @Autowired
+    private AiCoachService aiCoachService;
 
     // 3.1 统一代码提交入口 (支持日常提交与比赛提交自适应) -> POST /api/submission
     @Operation(summary = "统一提交代码评测 (需登录)")
@@ -28,7 +33,7 @@ public class SubmissionController {
         return Result.success(submissionService.submit(dto));
     }
 
-    // 3.2 查询单次提交记录详情 (包含代码与测试点明细，赛中非本人禁止偷看) -> GET /api/submission/{id}
+    // 3.2 查询单次提交记录详情 (包含代码、测试点明细与AI报告回显，赛中非本人禁止偷看) -> GET /api/submission/{id}
     @Operation(summary = "查询单次提交记录详情 (需登录且有权查看)")
     @GetMapping("/{id}")
     public Result<SubmissionVO> getById(@PathVariable Long id) {
@@ -40,5 +45,12 @@ public class SubmissionController {
     @GetMapping("/list")
     public Result<PageResult<SubmissionVO>> listSubmissions(@ParameterObject @Valid SubmissionQueryDTO queryDTO) {
         return Result.success(submissionService.listSubmissions(queryDTO));
+    }
+
+    // 3.4 触发/获取单次提交的 AI 代码诊断报告 -> POST /api/submission/{id}/ai-analyze
+    @Operation(summary = "触发或获取单次提交的 AI 代码诊断报告 (需登录，限本人或管理员)")
+    @PostMapping("/{id}/ai-analyze")
+    public Result<AiAnalysisReportVO> analyzeSubmission(@PathVariable Long id) {
+        return Result.success(aiCoachService.analyzeSubmission(id));
     }
 }

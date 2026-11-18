@@ -220,16 +220,16 @@ GET /api/user/admin/list?pageNum=1&pageSize=10&keyword=zhang&role=USER
 
 - **响应数据说明 (`Result<PageResult<UserVO>>`)**：
 
-| 字段名 | 类型 | 是否必须 | 备注 |
-| :--- | :--- | :--- | :--- |
-| code | number | 必须 | 响应状态码：`0`-成功，`1`-失败 |
-| message | string | 必须 | 提示信息 |
-| data | object | 必须 | **分页结果包装对象 (`PageResult<UserVO>`)** |
-| ├─ total | number | 必须 | 满足筛选条件的总记录数 (用于前端分页器计算总页数) |
-| └─ records | array | 必须 | 当前页的数据列表 (`List<UserVO>`) |
-| &emsp;&emsp;├─ id | number | 必须 | 用户唯一主键 ID (`Long`) |
-| &emsp;&emsp;├─ username | string | 必须 | 用户名 |
-| &emsp;&emsp;├─ role | string | 必须 | 用户角色：`USER` / `ADMIN` / `ROOT` |
+| 字段名                      | 类型 | 是否必须 | 备注 |
+|:-------------------------| :--- | :--- | :--- |
+| code                     | number | 必须 | 响应状态码：`0`-成功，`1`-失败 |
+| message                  | string | 必须 | 提示信息 |
+| data                     | object | 必须 | **分页结果包装对象 (`PageResult<UserVO>`)** |
+| ├─ total                 | number | 必须 | 满足筛选条件的总记录数 (用于前端分页器计算总页数) |
+| └─ items                 | array | 必须 | 当前页的数据列表 (`List<UserVO>`) |
+| &emsp;&emsp;├─ id        | number | 必须 | 用户唯一主键 ID (`Long`) |
+| &emsp;&emsp;├─ username  | string | 必须 | 用户名 |
+| &emsp;&emsp;├─ role      | string | 必须 | 用户角色：`USER` / `ADMIN` / `ROOT` |
 | &emsp;&emsp;└─ createdAt | string | 必须 | 注册时间，格式：`yyyy-MM-dd HH:mm:ss` |
 
 - **成功响应样例**：
@@ -722,33 +722,40 @@ GET /api/problem/list?pageNum=1&pageSize=10&title=动态规划&isPublic=1
 
 ---
 
-### 3.2 获取单次提交详情 (含代码与评测报告)
+
+### 3.2 获取单次提交详情 (含代码、评测报告与 AI 诊断回显)
 - **接口路径**：`GET /api/submission/{id}`
 - **请求头 (Headers)**：
   - `Authorization`: `Bearer <Token>` (**必须登录**)
 - **防作弊安全红线**：
-  1. 提交者本人与管理员 (`ADMIN`/`ROOT`) 可无条件查看任何时期的完整代码与测试点明细。
+  1. 提交者本人与管理员 (`ADMIN`/`ROOT`) 可无条件查看任何时期的完整代码、测试点明细与 AI 诊断报告。
   2. **其他用户查看时**：若该提交属于**进行中的比赛**或**未公开的保密题**，后端直接返回 `403` 拒绝访问！日常公开题或已结束比赛的提交允许自由查阅学习。
+- **AI 报告回显说明**：
+  - 若该次提交此前已调用过 `3.4` 接口生成过 AI 诊断报告，则 `aiReport` 字段直接返回完整报告对象（前端可直接渲染并隐藏“生成诊断”按钮）；
+  - 若尚未生成过 AI 诊断报告，则 `aiReport` 字段值为 `null`（前端可展示“✨ AI 代码诊断”触发按钮）。
 - **响应数据说明 (`Result<SubmissionVO>`)**：
 
 | 字段名 | 类型 | 是否必须 | 备注 |
 | :--- | :--- | :--- | :--- |
 | code | number | 必须 | 状态码：`0`-成功，`403`-防作弊拦截 |
-| data | object | 必须 | 完整提交视图对象 |
+| message | string | 必须 | 提示信息 |
+| data | object | 必须 | 完整提交视图对象 (`SubmissionVO`) |
 | ├─ id | number | 必须 | 提交 ID |
 | ├─ userId | number | 必须 | 用户 ID |
 | ├─ username | string | 必须 | 用户名 |
 | ├─ problemId | number | 必须 | 题目 ID |
 | ├─ problemTitle | string | 必须 | 题目标题 |
-| ├─ language | string | 必须 | 编程语言 |
+| ├─ contestId | number | 非必须 | 比赛 ID (日常提交为 `null`) |
+| ├─ language | string | 必须 | 编程语言 (`cpp` / `c`) |
 | ├─ verdict | string | 必须 | 评测状态：`Accepted` / `Wrong Answer` / `Compile Error` 等 |
 | ├─ maxTimeMs | number | 必须 | 最大耗时 (ms) |
 | ├─ peakMemoryKb | number | 必须 | 峰值内存 (KB) |
 | ├─ code | string | 必须 | 源代码正文 |
 | ├─ judgeDetails | string | 必须 | 测试点通过情况明细 (JSON 字符串) 或编译日志 |
-| └─ createdAt | string | 必须 | 提交时间 |
+| ├─ createdAt | string | 必须 | 提交时间 (`yyyy-MM-dd HH:mm:ss`) |
+| └─ aiReport | object \| null | 非必须 | **AI 代码诊断报告对象 (`AiAnalysisReportVO`)**。未生成过则为 `null`，结构详见 3.4 |
 
-- **成功响应样例**：
+- **成功响应样例 (已生成过 AI 诊断报告)**：
 ```json
 {
   "code": 0,
@@ -766,7 +773,26 @@ GET /api/problem/list?pageNum=1&pageSize=10&title=动态规划&isPublic=1
     "peakMemoryKb": 1024,
     "code": "#include <iostream>...",
     "judgeDetails": "[{\"caseId\":1,\"verdict\":\"Accepted\",\"timeMs\":2,\"memoryKb\":1024}]",
-    "createdAt": "2026-10-24 19:30:00"
+    "createdAt": "2026-10-24 19:30:00",
+    "aiReport": {
+      "congratulation": "太棒了！你的代码逻辑清晰，顺利通过了全部测试点！",
+      "method": {
+        "currentMethod": "直接模拟标准输入输出流循环读取求和",
+        "suggestedMethod": "当前已是最佳解法，无需更换算法",
+        "coreConcept": "基础 I/O 流控制与整数加法",
+        "thinkingPrompt": "如果输入的数字长达 1000 位（超出 long long 范围），该如何调整你的数据结构？"
+      },
+      "efficiency": {
+        "currentTimeComplexity": "O(1)",
+        "suggestedTimeComplexity": "O(1)",
+        "optimizationAdvice": "可以加入 ios::sync_with_stdio(false); 进一步加速 C++ 的 cin/cout 流读写性能。"
+      },
+      "style": {
+        "readability": "变量命名简洁，缩进规范，易于阅读。",
+        "structure": "单主函数结构紧凑，符合算法竞赛短代码习惯。",
+        "advice": "建议保持良好的代码排版，并在关键边界条件处添加简短注释。"
+      }
+    }
   }
 }
 ```
@@ -834,6 +860,105 @@ GET /api/problem/list?pageNum=1&pageSize=10&title=动态规划&isPublic=1
   }
 }
 ```
+
+
+### 3.4 触发/获取单次提交的 AI 代码诊断报告
+- **接口路径**：`POST /api/submission/{id}/ai-analyze`
+- **请求头 (Headers)**：
+  - `Authorization`: `Bearer <Token>` (**必须登录**)
+- **路径参数说明 (Path Variable)**：
+
+| 参数名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| id | number | 必须 | 目标提交记录的唯一主键 ID (`submissionId`，如 `/api/submission/501/ai-analyze`) |
+
+- **业务规则与防作弊红线**：
+  1. **触发权限限制**：仅限**该次提交的所属用户本人**或**管理员 (`ADMIN`/`ROOT`)** 调用。严禁普通用户对其他人的提交触发 AI 诊断。
+  2. **赛事与保密题防作弊拦截**：
+    - 若该提交属于**正在进行中 (`RUNNING`) 的比赛**，非管理员调用直接返回 `403` 拦截（比赛结束后 `ENDED` 允许赛后复盘调用）；
+    - 若该提交关联的题目为**未公开的比赛保密题 (`isPublic = 0`)**，非管理员直接返回 `403` 拦截。
+  3. **评测终态前置要求**：当提交记录尚处于 `PENDING`（排队中）或 `RUNNING`（评测中）状态时，拒绝调用并提示等待评测完成。
+  4. **单次生成与幂等回显**：每次提交记录仅调用大模型生成一次诊断报告并持久化至 `tb_ai_analysis` 表。若该 `submissionId` 已存在诊断报告，再次调用本接口将直接从数据库幂等返回已有报告（不报错、不重复扣减配额与 Token）。
+  5. **防并发锁与每日配额限制**：
+    - 单次诊断生成期间受 Redis 分布式锁（`lock:ai:analyze:{submissionId}`，TTL 60s）保护，防止双击并发穿透重复调用 Agent；
+    - 普通用户 (`USER`) 每日最多允许触发 **20 次**全新的 AI 代码诊断（Redis 计数器 `limit:ai:daily:{yyyyMMdd}:{userId}`，管理员 `ADMIN`/`ROOT` 不受每日配额限制）。
+
+- **响应数据说明 (`Result<AiAnalysisReportVO>`)**：
+
+| 字段名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| code | number | 必须 | 状态码：`0`-成功，`1`-业务拦截（未评测完/配额耗尽/生成中），`403`-防作弊或非本人操作拦截 |
+| message | string | 必须 | 提示信息 |
+| data | object | 必须 | **AI 诊断报告视图对象 (`AiAnalysisReportVO`)** |
+| ├─ congratulation | string | 必须 | AI 鼓励语 / 诊断总评大标题 |
+| ├─ method | object | 必须 | **算法与方法分析板块 (`MethodAnalysis`)** |
+| │&emsp;├─ currentMethod | string | 必须 | 用户当前采用的方法分析 |
+| │&emsp;├─ suggestedMethod | string | 必须 | AI 推荐的标准/更优算法思路 |
+| │&emsp;├─ coreConcept | string | 必须 | 考察的核心算法概念与知识点 |
+| │&emsp;└─ thinkingPrompt | string | 必须 | 启发式思考题（引导用户自主思考改进，不直接给答案代码） |
+| ├─ efficiency | object | 必须 | **运行效率与复杂度板块 (`EfficiencyAnalysis`)** |
+| │&emsp;├─ currentTimeComplexity | string | 必须 | 当前代码的时间/空间复杂度评估 |
+| │&emsp;├─ suggestedTimeComplexity | string | 必须 | 目标最优时间/空间复杂度 |
+| │&emsp;└─ optimizationAdvice | string | 必须 | 针对性的性能优化与常数优化建议 |
+| └─ style | object | 必须 | **代码风格与工程规范板块 (`StyleAnalysis`)** |
+| &emsp;&emsp;├─ readability | string | 必须 | 可读性评价（命名、注释、格式） |
+| &emsp;&emsp;├─ structure | string | 必须 | 代码模块化与逻辑结构评价 |
+| &emsp;&emsp;└─ advice | string | 必须 | 代码风格改进建议 |
+
+- **成功响应样例**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "congratulation": "距离 AC 只差一步之遥！你的整体贪心思路是对的，但在边界条件上掉入了陷阱。",
+    "method": {
+      "currentMethod": "使用暴力双重循环枚举所有区间求和，尝试寻找最优解。",
+      "suggestedMethod": "采用前缀和数组（Prefix Sum）配合哈希表，或者使用双指针滑动窗口。",
+      "coreConcept": "前缀和、区间快速查询、边界溢出处理",
+      "thinkingPrompt": "当数组元素全为正数且达到 10^5 规模时，内层循环的累加结果最大会达到多少？int 类型装得下吗？"
+    },
+    "efficiency": {
+      "currentTimeComplexity": "O(N^2)",
+      "suggestedTimeComplexity": "O(N)",
+      "optimizationAdvice": "当前双重循环在 N=100000 时必然触发 TLE。预处理前缀和数组后，可将单次区间求和从 O(N) 降至 O(1)。"
+    },
+    "style": {
+      "readability": "循环控制变量命名清晰，但缺少对核心状态转移的注释。",
+      "structure": "主函数逻辑略显臃肿，输入处理与核心计算耦合在一起。",
+      "advice": "建议将核心求解逻辑抽离为独立的 solve() 函数，并将累加器变量类型声明为 long long 以防溢出。"
+    }
+  }
+}
+```
+
+- **失败响应样例 1 (比赛进行中防作弊拦截)**：
+```json
+{
+  "code": 403,
+  "message": "比赛正在进行中，严禁使用 AI 代码诊断功能！请待比赛结束后再进行复盘。",
+  "data": null
+}
+```
+
+- **失败响应样例 2 (每日 20 次配额耗尽)**：
+```json
+{
+  "code": 1,
+  "message": "您今日的 AI 代码诊断次数已达上限 (20/20)，请明日再来！",
+  "data": null
+}
+```
+
+- **失败响应样例 3 (重复点击 / 正在生成中)**：
+```json
+{
+  "code": 1,
+  "message": "AI 正在全力诊断该份代码中，请勿重复点击！",
+  "data": null
+}
+```
+
 
 ---
 

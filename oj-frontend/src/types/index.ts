@@ -64,6 +64,7 @@ export interface Submission {
   peakMemoryKb: number
   judgeDetails?: string | CaseDetail[]
   createdAt: string
+  aiReport?: AiAnalysisReport | null // <--- 新增这一行
 }
 
 export interface SubmissionQueryParams extends PageQueryParams {
@@ -150,5 +151,25 @@ export interface UserAuthDTO {
   password: string
 }
 
+// 14. AI 诊断报告结构定义（标准小驼峰，与后端 AiAnalysisReportVO 对齐）
+export interface AiAnalysisReport {
+  congratulation: string
+  method: {
+    currentMethod: string
+    suggestedMethod: string
+    coreConcept: string
+    thinkingPrompt: string
+  }
+  efficiency: {
+    currentTimeComplexity: string
+    suggestedTimeComplexity: string
+    optimizationAdvice: string
+  }
+  style: {
+    readability: string
+    structure: string
+    advice: string
+  }
+}
 
 

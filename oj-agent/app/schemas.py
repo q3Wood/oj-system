@@ -11,18 +11,17 @@ class FailedTestCase(BaseModel):
 class AnalyzeRequest(BaseModel):
     """前端/Java 后端发来的诊断请求体"""
     submission_id: int = Field(description="本次提交记录ID")
-    user_id: int = Field(description="提交学生用户ID")
     problem_id: int = Field(description="题目ID")
     problem_title: str = Field(description="题目标题")
     problem_description: str = Field(description="题目Markdown描述")
     language: str = Field(default="cpp", description="代码语言，如 cpp, java, python")
     user_code: str = Field(description="学生提交的源代码")
-    judge_status: str = Field(description="评测结果状态，如 Wrong Answer, Compile Error")
-    failed_test_case: FailedTestCase | None = Field(default=None, description="未通过测试点详情")
-    # 👇【新增字段】：Spring Boot 可直接从 MySQL 传入本题出题人题解（若无则默认为 None）
+    judge_status: str = Field(description="评测结果状态，如 Wrong Answer, Compile Error, Runtime Error")
+    failed_test_case: FailedTestCase | None = Field(default=None, description="未通过测试点详情(WA时传入)")
+    error_message: str | None = Field(default=None, description="编译报错日志(CE)或沙箱崩溃信号描述(RE)")
     official_editorial: str | None = Field(default=None, description="出题人官方题解或解题思路")
 
-# ==================== 2. 出参契约 (Python ➔ 前端力扣卡片) ====================
+# ==================== 2. 出参契约 (Python ➔ Spring Boot) ====================
 
 class MethodAnalysis(BaseModel):
     current_method: str = Field(description="当前代码使用的方法，例如：深度优先搜索 / 模拟")

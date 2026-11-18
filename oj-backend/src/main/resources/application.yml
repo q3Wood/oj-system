@@ -37,3 +37,7 @@ oj:
   judge:
     binary-path: "../core-judge/build/core-judge"
     problems-dir: "../core-judge/data/problems"
+  agent:
+    base-url: ${OJ_AGENT_URL:http://127.0.0.1:8000}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 35000 # 大模型推理较慢，读超时设为 35 秒

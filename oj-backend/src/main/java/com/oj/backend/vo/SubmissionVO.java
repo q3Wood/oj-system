@@ -52,6 +52,10 @@ public class SubmissionVO {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime createdAt;
 
+    @Schema(description = "AI 代码诊断报告 (未生成时为 null)")
+    // 在 SubmissionVO.java 的成员变量区域新增：
+    private AiAnalysisReportVO aiReport;
+
     public static SubmissionVO fromEntity(Submission sub) {
         if (sub == null) return null;
         SubmissionVO vo = new SubmissionVO();

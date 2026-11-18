@@ -2,6 +2,7 @@ package com.oj.backend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.backend.common.BusinessException;
 import com.oj.backend.common.JudgeConstants;
 import com.oj.backend.common.PageResult;
@@ -12,6 +13,7 @@ import com.oj.backend.dto.SubmitDTO;
 import com.oj.backend.entity.*;
 import com.oj.backend.mapper.*;
 import com.oj.backend.service.SubmissionService;
+import com.oj.backend.vo.AiAnalysisReportVO;
 import com.oj.backend.vo.SubmissionVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +51,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private AiAnalysisMapper aiAnalysisMapper;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     // @Transactional(rollbackFor = Exception.class)
@@ -160,6 +168,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new BusinessException("提交记录不存在！(ID: " + id + ")");
         }
 
+        Problem prob = problemMapper.selectById(submission.getProblemId());
         boolean isSelf = submission.getUserId().equals(currentUserId);
         boolean isAdmin = isAdminOrRoot();
 
@@ -170,19 +179,39 @@ public class SubmissionServiceImpl implements SubmissionService {
                 if (contest != null && LocalDateTime.now().isBefore(contest.getEndTime())) {
                     throw new BusinessException(403, "比赛正在进行中，严禁查看其他选手的提交代码与明细！");
                 }
-            }
-            Problem problem = problemMapper.selectById(submission.getProblemId());
-            if (problem != null && problem.getIsPublic() != null && problem.getIsPublic() == 0) {
-                throw new BusinessException(403, "该题目尚在保密阶段，禁止查看代码！");
+            } else {
+                if (prob != null && prob.getIsPublic() != null && prob.getIsPublic() == 0) {
+                    throw new BusinessException(403, "该题目尚在保密阶段，禁止查看代码！");
+                }
             }
         }
 
         SubmissionVO vo = SubmissionVO.fromEntity(submission);
 
         User user = userMapper.selectById(submission.getUserId());
-        if (user != null) vo.setUsername(user.getUsername());
-        Problem prob = problemMapper.selectById(submission.getProblemId());
-        if (prob != null) vo.setProblemTitle(prob.getTitle());
+        if (user != null) {
+            vo.setUsername(user.getUsername());
+        }
+        if (prob != null) {
+            vo.setProblemTitle(prob.getTitle());
+        }
+
+        // 回显 AI 诊断报告（若该提交此前已生成过诊断报告，则直接内嵌返回；否则为 null）
+        AiAnalysis aiAnalysis = aiAnalysisMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AiAnalysis>()
+                        .eq(AiAnalysis::getSubmissionId, id)
+        );
+        if (aiAnalysis != null && aiAnalysis.getRawReport() != null) {
+            try {
+                AiAnalysisReportVO reportVO = objectMapper.readValue(
+                        aiAnalysis.getRawReport(), AiAnalysisReportVO.class
+                );
+                vo.setAiReport(reportVO);
+            } catch (Exception e) {
+                // 反序列化异常时不阻断主流程，仅打印日志，aiReport 保持 null
+                System.err.println("解析历史 AI 诊断报告 JSON 失败, submissionId=" + id + ", error=" + e.getMessage());
+            }
+        }
 
         return vo;
     }
