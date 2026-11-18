@@ -25,7 +25,10 @@ cout << (a + b) / 2;
   "efficiency": {
     "current_time_complexity": "O(1)",
     "suggested_time_complexity": "O(1)",
-    "optimization_advice": "时空复杂度均为最优常数阶，重点修正运算符逻辑错误即可。"
+    "optimization_advice": "时间复杂度已为最优常数阶 O(1)，重点修正运算符逻辑错误即可。",
+    "current_space_complexity": "O(1)",
+    "suggested_space_complexity": "O(1)",
+    "space_optimization_advice": "仅使用了两个基础整型变量，空间开销已是最小常数阶 O(1)，无需优化。"
   },
   "style": {
     "readability": "良好",

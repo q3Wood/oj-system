@@ -50,8 +50,20 @@ public class AiAnalysisReportVO {
         private String suggestedTimeComplexity;
 
         @JsonAlias("optimization_advice")
-        @Schema(description = "针对性的性能优化建议")
+        @Schema(description = "针对时间复杂度的性能优化建议")
         private String optimizationAdvice;
+
+        @JsonAlias("current_space_complexity")
+        @Schema(description = "当前代码的空间复杂度评估")
+        private String currentSpaceComplexity;
+
+        @JsonAlias("suggested_space_complexity")
+        @Schema(description = "目标最优空间复杂度")
+        private String suggestedSpaceComplexity;
+
+        @JsonAlias("space_optimization_advice")
+        @Schema(description = "针对空间复杂度的内存优化建议")
+        private String spaceOptimizationAdvice;
     }
 
     @Data

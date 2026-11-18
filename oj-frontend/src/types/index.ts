@@ -164,6 +164,9 @@ export interface AiAnalysisReport {
     currentTimeComplexity: string
     suggestedTimeComplexity: string
     optimizationAdvice: string
+    currentSpaceComplexity?: string
+    suggestedSpaceComplexity?: string
+    spaceOptimizationAdvice?: string
   }
   style: {
     readability: string

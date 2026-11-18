@@ -885,25 +885,28 @@ GET /api/problem/list?pageNum=1&pageSize=10&title=动态规划&isPublic=1
 
 - **响应数据说明 (`Result<AiAnalysisReportVO>`)**：
 
-| 字段名 | 类型 | 是否必须 | 备注 |
-| :--- | :--- | :--- | :--- |
-| code | number | 必须 | 状态码：`0`-成功，`1`-业务拦截（未评测完/配额耗尽/生成中），`403`-防作弊或非本人操作拦截 |
-| message | string | 必须 | 提示信息 |
-| data | object | 必须 | **AI 诊断报告视图对象 (`AiAnalysisReportVO`)** |
-| ├─ congratulation | string | 必须 | AI 鼓励语 / 诊断总评大标题 |
-| ├─ method | object | 必须 | **算法与方法分析板块 (`MethodAnalysis`)** |
-| │&emsp;├─ currentMethod | string | 必须 | 用户当前采用的方法分析 |
-| │&emsp;├─ suggestedMethod | string | 必须 | AI 推荐的标准/更优算法思路 |
-| │&emsp;├─ coreConcept | string | 必须 | 考察的核心算法概念与知识点 |
-| │&emsp;└─ thinkingPrompt | string | 必须 | 启发式思考题（引导用户自主思考改进，不直接给答案代码） |
-| ├─ efficiency | object | 必须 | **运行效率与复杂度板块 (`EfficiencyAnalysis`)** |
-| │&emsp;├─ currentTimeComplexity | string | 必须 | 当前代码的时间/空间复杂度评估 |
-| │&emsp;├─ suggestedTimeComplexity | string | 必须 | 目标最优时间/空间复杂度 |
-| │&emsp;└─ optimizationAdvice | string | 必须 | 针对性的性能优化与常数优化建议 |
-| └─ style | object | 必须 | **代码风格与工程规范板块 (`StyleAnalysis`)** |
-| &emsp;&emsp;├─ readability | string | 必须 | 可读性评价（命名、注释、格式） |
-| &emsp;&emsp;├─ structure | string | 必须 | 代码模块化与逻辑结构评价 |
-| &emsp;&emsp;└─ advice | string | 必须 | 代码风格改进建议 |
+| 字段名                                | 类型 | 是否必须 | 备注                                                   |
+|:-----------------------------------| :--- | :--- |:-----------------------------------------------------|
+| code                               | number | 必须 | 状态码：`0`-成功，`1`-业务拦截（未评测完/配额耗尽/生成中），`403`-防作弊或非本人操作拦截 |
+| message                            | string | 必须 | 提示信息                                                 |
+| data                               | object | 必须 | **AI 诊断报告视图对象 (`AiAnalysisReportVO`)**               |
+| ├─ congratulation                  | string | 必须 | AI 鼓励语 / 诊断总评大标题                                     |
+| ├─ method                          | object | 必须 | **算法与方法分析板块 (`MethodAnalysis`)**                     |
+| │&emsp;├─ currentMethod            | string | 必须 | 用户当前采用的方法分析                                          |
+| │&emsp;├─ suggestedMethod          | string | 必须 | AI 推荐的标准/更优算法思路                                      |
+| │&emsp;├─ coreConcept              | string | 必须 | 考察的核心算法概念与知识点                                        |
+| │&emsp;└─ thinkingPrompt           | string | 必须 | 启发式思考题（引导用户自主思考改进，不直接给答案代码）                          |
+| ├─ efficiency                      | object | 必须 | **运行效率与复杂度板块 (`EfficiencyAnalysis`)**                |
+| │&emsp;├─ currentTimeComplexity    | string | 必须 | 当前代码的时间复杂度评估                                         |
+| │&emsp;├─ suggestedTimeComplexity  | string | 必须 | 目标最优时间复杂度                                            |
+| │&emsp;└─ optimizationAdvice       | string | 必须 | 针对时间的性能优化与常数优化建议                                     |
+| │&emsp;├─ currentSpaceComplexity   | string | 必须 | 当前代码的空间复杂度评估                                         |
+| │&emsp;├─ suggestedSpaceComplexity | string | 必须 | 目标最优空间复杂度                                            |
+| │&emsp;└─ SpaceOptimizationAdvice  | string | 必须 | 针对空间的性能优化与常数优化建议                                     |
+| └─ style                           | object | 必须 | **代码风格与工程规范板块 (`StyleAnalysis`)**                    |
+| &emsp;&emsp;├─ readability         | string | 必须 | 可读性评价（命名、注释、格式）                                      |
+| &emsp;&emsp;├─ structure           | string | 必须 | 代码模块化与逻辑结构评价                                         |
+| &emsp;&emsp;└─ advice              | string | 必须 | 代码风格改进建议                                             |
 
 - **成功响应样例**：
 ```json

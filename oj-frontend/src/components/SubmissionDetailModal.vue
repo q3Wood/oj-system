@@ -70,23 +70,62 @@
               </div>
             </div>
 
-            <!-- 板块 B：运行效率与复杂度 -->
+            <!-- 板块 B：运行效率 (力扣同款胶囊 Tab 切换时间/空间复杂度) -->
             <div class="ai-sub-card">
-              <div class="sub-card-title">⚡ 运行效率与复杂度</div>
-              <div class="complexity-row">
-                <div class="comp-item">
-                  <div class="comp-label">当前时间复杂度</div>
-                  <div class="comp-val">{{ submission.aiReport.efficiency?.currentTimeComplexity }}</div>
+              <div class="sub-card-title">⚡ 运行效率</div>
+
+              <!-- 胶囊标签切换器 -->
+              <div class="lc-tabs">
+                <button
+                  type="button"
+                  class="lc-tab-btn"
+                  :class="{ active: activeEfficiencyTab === 'time' }"
+                  @click="activeEfficiencyTab = 'time'"
+                >
+                  时间复杂度
+                </button>
+                <button
+                  type="button"
+                  class="lc-tab-btn"
+                  :class="{ active: activeEfficiencyTab === 'space' }"
+                  @click="activeEfficiencyTab = 'space'"
+                >
+                  空间复杂度
+                </button>
+              </div>
+
+              <!-- 切换内容面板：时间复杂度 -->
+              <div v-if="activeEfficiencyTab === 'time'" class="lc-efficiency-body">
+                <div class="ai-field">
+                  <span class="field-label">当前复杂度：</span>
+                  <span class="lc-math-font">{{ submission.aiReport.efficiency?.currentTimeComplexity || 'O(?)' }}</span>
                 </div>
-                <div class="comp-arrow">➔</div>
-                <div class="comp-item">
-                  <div class="comp-label">目标最优复杂度</div>
-                  <div class="comp-val best">{{ submission.aiReport.efficiency?.suggestedTimeComplexity }}</div>
+                <div class="ai-field">
+                  <span class="field-label">建议复杂度：</span>
+                  <span class="lc-math-font best">{{ submission.aiReport.efficiency?.suggestedTimeComplexity || 'O(?)' }}</span>
+                </div>
+                <div class="ai-field" style="margin-top: 8px;">
+                  <span class="field-label">优化建议：</span>
+                  <span class="field-val">{{ submission.aiReport.efficiency?.optimizationAdvice }}</span>
                 </div>
               </div>
-              <div class="ai-field" style="margin-top: 10px;">
-                <span class="field-label">优化建议：</span>
-                <span class="field-val">{{ submission.aiReport.efficiency?.optimizationAdvice }}</span>
+
+              <!-- 切换内容面板：空间复杂度 -->
+              <div v-else class="lc-efficiency-body">
+                <div class="ai-field">
+                  <span class="field-label">当前复杂度：</span>
+                  <span class="lc-math-font">{{ submission.aiReport.efficiency?.currentSpaceComplexity || 'O(1)' }}</span>
+                </div>
+                <div class="ai-field">
+                  <span class="field-label">建议复杂度：</span>
+                  <span class="lc-math-font best">{{ submission.aiReport.efficiency?.suggestedSpaceComplexity || 'O(1)' }}</span>
+                </div>
+                <div class="ai-field" style="margin-top: 8px;">
+                  <span class="field-label">优化建议：</span>
+                  <span class="field-val">
+                    {{ submission.aiReport.efficiency?.spaceOptimizationAdvice || submission.aiReport.efficiency?.optimizationAdvice }}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -191,6 +230,7 @@ const visible = computed({
 
 const loading = ref(false)
 const aiLoading = ref(false)
+const activeEfficiencyTab = ref<'time' | 'space'>('time')
 const submission = ref<Submission | null>(null)
 
 /**
@@ -303,6 +343,7 @@ const copyCode = async () => {
 const handleClosed = () => {
   submission.value = null
   aiLoading.value = false
+  activeEfficiencyTab.value = 'time'
 }
 
 const getVerdictBannerClass = (v: string) => {
@@ -561,5 +602,45 @@ const getErrorMessage = (sub: Submission | null) => {
   max-height: 250px;
   overflow-y: auto;
   border: 1px solid #333;
+}
+/* 力扣同款胶囊切换器与复杂度数学字体样式 */
+.lc-tabs {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lc-tab-btn {
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+.lc-tab-btn:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+.lc-tab-btn.active {
+  background-color: #ede9fe;
+  color: #5b21b6;
+  font-weight: 600;
+}
+.lc-efficiency-body {
+  padding-top: 2px;
+}
+.lc-math-font {
+  font-family: 'Times New Roman', Cambria, 'Fira Code', serif;
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+.lc-math-font.best {
+  color: #10b981;
 }
 </style>

@@ -32,7 +32,10 @@ class MethodAnalysis(BaseModel):
 class EfficiencyAnalysis(BaseModel):
     current_time_complexity: str = Field(description="当前代码的时间复杂度，例如：O(n^2)")
     suggested_time_complexity: str = Field(description="最优时间复杂度，例如：O(n log n)")
-    optimization_advice: str = Field(description="具体的性能优化建议")
+    optimization_advice: str = Field(description="针对时间复杂度的具体性能优化建议")
+    current_space_complexity: str = Field(default="O(1)", description="当前代码的空间复杂度，例如：O(n)")
+    suggested_space_complexity: str = Field(default="O(1)", description="最优空间复杂度，例如：O(1)")
+    space_optimization_advice: str = Field(default="空间复杂度已最优，无需额外优化。", description="针对空间复杂度的内存与数据结构优化建议")
 
 class StyleAnalysis(BaseModel):
     readability: str = Field(description="可读性评级：优秀 / 良好 / 需改进")
