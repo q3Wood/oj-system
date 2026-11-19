@@ -109,12 +109,14 @@ oj-system/
 
 ## 🖼️ 系统界面预览
 
+### 1. 力扣同款 AI 代码导师诊断卡片（时空复杂度胶囊切换 + 苏格拉底启发思考）
+<img src="./docs/images/ai-report.png" alt="AI 代码导师诊断卡片" width="800" />
 
-| 核心模块 | 效果预览 |
-| :--- | :--- |
-| **力扣同款 AI 代码导师诊断卡片**<br/>（时空复杂度胶囊切换 + 苏格拉底启发思考） | `<!-- ![alt text](image.png) -->` |
-| **分栏做题工作台 & 在线评测** | `<!-- ![alt text](image-1.png) -->` |
-| **ICPC 实时竞赛滚榜大厅** | `<!-- ![alt text](image-2.png) -->` |
+### 2. 分栏做题工作台 & 在线评测
+<img src="./docs/images/workspace.png" alt="分栏做题工作台" width="800" />
+
+### 3. ICPC 实时竞赛滚榜大厅
+<img src="./docs/images/ranklist.png" alt="ICPC 实时竞赛滚榜" width="800" />
 
 ---
 
