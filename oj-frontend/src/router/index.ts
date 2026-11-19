@@ -102,4 +102,9 @@ router.beforeEach((to) => {
   return true
 })
 
+router.afterEach((to) => {
+  const pageTitle = to.meta?.title as string | undefined
+  document.title = pageTitle ? `${pageTitle} - Core OJ` : 'Core OJ - 在线算法评测系统'
+})
+
 export default router
