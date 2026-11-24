@@ -2,6 +2,8 @@ package com.oj.backend.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.backend.common.BusinessException;
+import com.oj.backend.dto.GenVerifyRequestDTO;
+import com.oj.backend.dto.GenVerifyResultDTO;
 import com.oj.backend.dto.JudgeResultDTO;
 import com.oj.backend.service.JudgeService;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,4 +71,80 @@ public class LocalProcessJudgeServiceImpl implements JudgeService {
             } catch (Exception ignored) {}
         }
     }
+
+
+    @Override
+    public GenVerifyResultDTO executeGenVerify(GenVerifyRequestDTO req) {
+        // 校验 taskId 格式防止路径穿越
+        if (req.getTaskId() == null || !req.getTaskId().matches("^[a-zA-Z0-9_-]{1,64}$")) {
+            throw new BusinessException("非法的 task_id 格式");
+        }
+
+        String uniqueId = UUID.randomUUID().toString().replace("-", "");
+        Path tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        Path genPath = tmpDir.resolve("gen_" + uniqueId + ".cpp");
+        Path stdPath = tmpDir.resolve("std_" + uniqueId + ".cpp");
+        Path brutePath = tmpDir.resolve("brute_" + uniqueId + ".cpp");
+        Path planPath = tmpDir.resolve("plan_" + uniqueId + ".txt");
+
+        // 草稿隔离目录: {problemsDir}/_drafts/{taskId}
+        Path draftProbDir = Path.of(problemsDir, "_drafts", req.getTaskId());
+
+        try {
+            Files.createDirectories(draftProbDir);
+            Files.writeString(genPath, req.getGenCode());
+            Files.writeString(stdPath, req.getStdCode());
+            Files.writeString(brutePath, req.getBruteCode());
+
+            // 组装行协议 plan.txt
+            StringBuilder planSb = new StringBuilder();
+            for (GenVerifyRequestDTO.TestPlanItemDTO item : req.getTestPlan()) {
+                planSb.append(item.getId()).append(" ")
+                        .append(Boolean.TRUE.equals(item.getCheckBrute()) ? 1 : 0).append(" ")
+                        .append(Boolean.TRUE.equals(item.getExpectBruteFail()) ? 1 : 0);
+                if (item.getArgs() != null) {
+                    for (String arg : item.getArgs()) {
+                        planSb.append(" ").append(arg);
+                    }
+                }
+                planSb.append("\n");
+            }
+            Files.writeString(planPath, planSb.toString());
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    judgeBinaryPath,
+                    "--mode", "gen-verify",
+                    "--prob-dir", draftProbDir.toAbsolutePath().toString(),
+                    "--gen-src", genPath.toAbsolutePath().toString(),
+                    "--std-src", stdPath.toAbsolutePath().toString(),
+                    "--brute-src", brutePath.toAbsolutePath().toString(),
+                    "--plan", planPath.toAbsolutePath().toString(),
+                    "--time", String.valueOf(req.getTimeLimitMs()),
+                    "--mem", String.valueOf(req.getMemoryLimitMb()),
+                    "--json"
+            );
+
+            Process process = pb.start();
+            String stdout = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0 && stdout.trim().isEmpty()) {
+                String stderr = new String(process.getErrorStream().readAllBytes());
+                throw new BusinessException("造题对拍沙箱错误: " + stderr);
+            }
+
+            return objectMapper.readValue(stdout, GenVerifyResultDTO.class);
+
+        } catch (BusinessException be) {
+            throw be;
+        } catch (Exception e) {
+            throw new BusinessException("造题对拍执行失败: " + e.getMessage());
+        } finally {
+            try { Files.deleteIfExists(genPath); } catch (Exception ignored) {}
+            try { Files.deleteIfExists(stdPath); } catch (Exception ignored) {}
+            try { Files.deleteIfExists(brutePath); } catch (Exception ignored) {}
+            try { Files.deleteIfExists(planPath); } catch (Exception ignored) {}
+        }
+    }
+
 }

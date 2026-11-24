@@ -4,6 +4,7 @@
 
 struct SandboxConfig {
     std::string exe_path;
+    std::vector<std::string> args; // 命令行参数
     std::string stdin_file;     // 重定向标准输入
     std::string stdout_file;    // 重定向标准输出
     std::string stderr_file;    // 重定向标准错误

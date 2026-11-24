@@ -8,6 +8,7 @@
 #include <map>
 #include <unistd.h>
 #include <csignal>
+#include <sstream>
 
 #include "common.hpp"
 #include "compiler.hpp"
@@ -27,9 +28,17 @@ namespace Color {
     const std::string BOLD    = "\033[1m";
 }
 
+// 在 main.cpp 顶部补充头文件
+#include <sstream>
+
 struct CLIConfig {
+    std::string mode = "judge"; // "judge" 或 "gen-verify"
     std::string prob_dir;
     std::string src_path;
+    std::string gen_src;        // 【新增】生成器源码路径
+    std::string std_src;        // 【新增】标程源码路径
+    std::string brute_src;      // 【新增】暴力解源码路径
+    std::string plan_path;      // 【新增】测试计划文件路径
     std::string lang = "cpp";
     int time_limit_ms = 1000;
     int memory_limit_mb = 256;
@@ -40,14 +49,210 @@ CLIConfig parse_arguments(int argc, char* argv[]) {
     CLIConfig config;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--prob-dir" && i + 1 < argc) config.prob_dir = argv[++i];
+        if (arg == "--mode" && i + 1 < argc) config.mode = argv[++i];
+        else if (arg == "--prob-dir" && i + 1 < argc) config.prob_dir = argv[++i];
         else if (arg == "--src" && i + 1 < argc) config.src_path = argv[++i];
+        else if (arg == "--gen-src" && i + 1 < argc) config.gen_src = argv[++i];
+        else if (arg == "--std-src" && i + 1 < argc) config.std_src = argv[++i];
+        else if (arg == "--brute-src" && i + 1 < argc) config.brute_src = argv[++i];
+        else if (arg == "--plan" && i + 1 < argc) config.plan_path = argv[++i];
         else if (arg == "--lang" && i + 1 < argc) config.lang = argv[++i];
         else if (arg == "--time" && i + 1 < argc) config.time_limit_ms = std::stoi(argv[++i]);
         else if (arg == "--mem" && i + 1 < argc) config.memory_limit_mb = std::stoi(argv[++i]);
         else if (arg == "--json") config.json_output = true;
     }
     return config;
+}
+
+// 【新增】读取文件前 max_bytes 字节作为反例切片，防止撑爆大模型上下文
+std::string read_file_snippet(const fs::path& file_path, size_t max_bytes = 500) {
+    std::ifstream ifs(file_path, std::ios::in | std::ios::binary);
+    if (!ifs.is_open()) return "";
+    std::string buf(max_bytes, '\0');
+    ifs.read(&buf[0], static_cast<std::streamsize>(max_bytes));
+    buf.resize(static_cast<size_t>(ifs.gcount()));
+    if (ifs.peek() != EOF) buf += "\n...[truncated]";
+    return buf;
+}
+
+// 【新增】通用执行状态判定辅助函数
+Verdict judge_execution_status(const ExecutionResult& exec_res, int memory_limit_mb, std::string& out_msg) {
+    out_msg = get_signal_description(exec_res.signal, exec_res.is_wall_timeout);
+    if (exec_res.is_wall_timeout || exec_res.signal == SIGXCPU) return Verdict::TLE;
+    if (exec_res.signal == SIGXFSZ) return Verdict::OLE;
+    if (exec_res.signal != 0 || exec_res.exit_code != 0) {
+        if (exec_res.signal == 0) out_msg = "Non-zero exit code: " + std::to_string(exec_res.exit_code);
+        return Verdict::RE;
+    }
+    if (exec_res.memory_kb > memory_limit_mb * 1024) {
+        out_msg = "Memory limit exceeded";
+        return Verdict::MLE;
+    }
+    return Verdict::AC;
+}
+
+// 【新增】造题对拍验题主逻辑
+int run_gen_verify_mode(const CLIConfig& config) {
+    if (config.prob_dir.empty() || config.gen_src.empty() || config.std_src.empty() ||
+        config.brute_src.empty() || config.plan_path.empty()) {
+        std::cerr << "Missing required args for --mode gen-verify\n";
+        return 1;
+    }
+
+    std::string run_id = std::to_string(getpid());
+    fs::path workspace = fs::temp_directory_path() / ("core_gen_" + run_id);
+    fs::create_directories(workspace);
+    fs::create_directories(config.prob_dir);
+
+    auto print_result_and_clean = [&](bool passed, const std::string& stage, const std::string& target,
+                                      int case_id, Verdict v, const std::string& msg,
+                                      const std::string& comp_log, const std::string& in_snip,
+                                      const std::string& std_snip, const std::string& brute_snip,
+                                      int max_t, int peak_m, bool brute_blocked) {
+        fs::remove_all(workspace);
+        std::cout << "{"
+                  << "\"passed\":" << (passed ? "true" : "false") << ","
+                  << "\"stage\":\"" << stage << "\","
+                  << "\"failed_target\":" << (target.empty() ? "null" : ("\"" + target + "\"")) << ","
+                  << "\"failed_case_id\":" << (case_id <= 0 ? "null" : std::to_string(case_id)) << ","
+                  << "\"verdict\":\"" << verdict_to_string(v) << "\","
+                  << "\"message\":\"" << escape_json(msg) << "\","
+                  << "\"compile_log\":" << (comp_log.empty() ? "null" : ("\"" + escape_json(comp_log) + "\"")) << ","
+                  << "\"input_snippet\":" << (in_snip.empty() ? "null" : ("\"" + escape_json(in_snip) + "\"")) << ","
+                  << "\"std_output_snippet\":" << (std_snip.empty() ? "null" : ("\"" + escape_json(std_snip) + "\"")) << ","
+                  << "\"brute_output_snippet\":" << (brute_snip.empty() ? "null" : ("\"" + escape_json(brute_snip) + "\"")) << ","
+                  << "\"max_time_ms\":" << max_t << ","
+                  << "\"peak_memory_kb\":" << peak_m << ","
+                  << "\"brute_blocked\":" << (brute_blocked ? "true" : "false")
+                  << "}\n";
+        return 0;
+    };
+
+    // 1. 编译三件套 (gen, std, brute)
+    fs::path gen_bin = workspace / "gen_bin";
+    fs::path std_bin = workspace / "std_bin";
+    fs::path brute_bin = workspace / "brute_bin";
+
+    struct CompileItem { std::string name; std::string src; fs::path bin; };
+    std::vector<CompileItem> items = {
+        {"gen", config.gen_src, gen_bin},
+        {"std", config.std_src, std_bin},
+        {"brute", config.brute_src, brute_bin}
+    };
+
+    for (const auto& item : items) {
+        CompileResult res = Compiler::build({item.src, item.bin.string(), "cpp", 10});
+        if (!res.ok) {
+            return print_result_and_clean(false, "COMPILE", item.name, 0, Verdict::CE,
+                                          "Compilation failed for " + item.name + ".cpp",
+                                          res.log, "", "", "", 0, 0, true);
+        }
+    }
+
+    // 2. 解析 plan.txt 并逐点造数与对拍
+    std::ifstream plan_ifs(config.plan_path);
+    std::string line;
+    int max_time_ms = 0;
+    int peak_memory_kb = 0;
+    bool brute_blocked = true;
+
+    while (std::getline(plan_ifs, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream iss(line);
+        int case_id = 0, check_brute = 0, expect_brute_fail = 0;
+        if (!(iss >> case_id >> check_brute >> expect_brute_fail)) continue;
+
+        std::vector<std::string> gen_args;
+        std::string token;
+        while (iss >> token) gen_args.push_back(token);
+
+        fs::path in_file = fs::path(config.prob_dir) / (std::to_string(case_id) + ".in");
+        fs::path out_file = fs::path(config.prob_dir) / (std::to_string(case_id) + ".out");
+        fs::path brute_out_file = workspace / (std::to_string(case_id) + ".brute.out");
+
+        // 2.1 沙箱运行生成器 gen_bin -> {case_id}.in
+        SandboxConfig gen_cfg;
+        gen_cfg.exe_path = gen_bin.string();
+        gen_cfg.args = gen_args;
+        gen_cfg.stdout_file = in_file.string();
+        gen_cfg.time_limit_ms = 2000;
+        gen_cfg.memory_limit_kb = 512 * 1024;
+
+        ExecutionResult gen_exec = SandboxRunner::run(gen_cfg);
+        std::string gen_msg;
+        Verdict gen_v = judge_execution_status(gen_exec, 512, gen_msg);
+        if (gen_v != Verdict::AC) {
+            return print_result_and_clean(false, "GEN_DATA", "gen", case_id, gen_v,
+                                          "Generator failed on case #" + std::to_string(case_id) + ": " + gen_msg,
+                                          "", "", "", "", max_time_ms, peak_memory_kb, brute_blocked);
+        }
+
+        // 2.2 沙箱运行标程 std_bin: {case_id}.in -> {case_id}.out
+        SandboxConfig std_cfg;
+        std_cfg.exe_path = std_bin.string();
+        std_cfg.stdin_file = in_file.string();
+        std_cfg.stdout_file = out_file.string();
+        std_cfg.time_limit_ms = config.time_limit_ms;
+        std_cfg.memory_limit_kb = config.memory_limit_mb * 1024;
+
+        ExecutionResult std_exec = SandboxRunner::run(std_cfg);
+        max_time_ms = std::max(max_time_ms, std_exec.cpu_time_ms);
+        peak_memory_kb = std::max(peak_memory_kb, std_exec.memory_kb);
+
+        std::string std_msg;
+        Verdict std_v = judge_execution_status(std_exec, config.memory_limit_mb, std_msg);
+        if (std_v != Verdict::AC) {
+            return print_result_and_clean(false, "RUN_STD", "std", case_id, std_v,
+                                          "Standard solution failed on case #" + std::to_string(case_id) + ": " + std_msg,
+                                          "", read_file_snippet(in_file), read_file_snippet(out_file), "",
+                                          max_time_ms, peak_memory_kb, brute_blocked);
+        }
+
+        // 2.3 沙箱运行暴力解 brute_bin (对拍校验或极限防暴力校验)
+        if (check_brute == 1) {
+            SandboxConfig brute_cfg;
+            brute_cfg.exe_path = brute_bin.string();
+            brute_cfg.stdin_file = in_file.string();
+            brute_cfg.stdout_file = brute_out_file.string();
+            brute_cfg.time_limit_ms = config.time_limit_ms;
+            brute_cfg.memory_limit_kb = config.memory_limit_mb * 1024;
+
+            ExecutionResult brute_exec = SandboxRunner::run(brute_cfg);
+            std::string brute_msg;
+            Verdict brute_v = judge_execution_status(brute_exec, config.memory_limit_mb, brute_msg);
+
+            if (expect_brute_fail == 0) {
+                // 小数据对拍模式：要求暴力解必须正常跑完且与标程输出 100% 一致
+                if (brute_v != Verdict::AC) {
+                    return print_result_and_clean(false, "STRESS_DIFF", "brute", case_id, brute_v,
+                                                  "Brute-force solution crashed/TLE on small case #" + std::to_string(case_id) + ": " + brute_msg,
+                                                  "", read_file_snippet(in_file), read_file_snippet(out_file), "",
+                                                  max_time_ms, peak_memory_kb, brute_blocked);
+                }
+                if (Checker::strict_diff(out_file.string(), brute_out_file.string()) != CheckStatus::MATCH) {
+                    return print_result_and_clean(false, "STRESS_DIFF", "std", case_id, Verdict::WA,
+                                                  "Output mismatch between std and brute on case #" + std::to_string(case_id),
+                                                  "", read_file_snippet(in_file), read_file_snippet(out_file),
+                                                  read_file_snippet(brute_out_file), max_time_ms, peak_memory_kb, brute_blocked);
+                }
+            } else {
+                // 极限数据防暴力模式：若暴力解居然没超时且答案还对，说明数据没卡住暴力
+                if (brute_v == Verdict::AC) {
+                    if (Checker::strict_diff(out_file.string(), brute_out_file.string()) != CheckStatus::MATCH) {
+                        return print_result_and_clean(false, "STRESS_DIFF", "std", case_id, Verdict::WA,
+                                                      "Output mismatch between std and brute on stress case #" + std::to_string(case_id),
+                                                      "", read_file_snippet(in_file), read_file_snippet(out_file),
+                                                      read_file_snippet(brute_out_file), max_time_ms, peak_memory_kb, brute_blocked);
+                    }
+                    brute_blocked = false; // 告警：暴力解在极限数据下全身而退
+                }
+            }
+        }
+    }
+
+    return print_result_and_clean(true, "DONE", "", 0, Verdict::AC,
+                                  "All test cases generated and verified successfully.",
+                                  "", "", "", "", max_time_ms, peak_memory_kb, brute_blocked);
 }
 
 void print_colored_verdict(Verdict v) {
@@ -112,6 +317,10 @@ bool natural_case_compare(const std::string& a, const std::string& b) {
 
 int main(int argc, char* argv[]) {
     CLIConfig config = parse_arguments(argc, argv);
+
+    if (config.mode == "gen-verify") {
+        return run_gen_verify_mode(config);
+    }
 
     if (config.prob_dir.empty() || config.src_path.empty()) {
         std::cerr << "Usage: " << argv[0] << " --prob-dir <dir> --src <source_file> [--lang cpp] [--time 1000] [--mem 256] [--json]\n";

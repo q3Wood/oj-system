@@ -155,3 +155,20 @@ CREATE TABLE IF NOT EXISTS `tb_ai_analysis` (
                                                 KEY `idx_user_id` (`user_id`),
                                                 KEY `idx_problem_id` (`problem_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 代码诊断与评审报告表';
+
+-- 9. 系统更新日志表
+CREATE TABLE IF NOT EXISTS `tb_changelog` (
+                                              `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                              `version` VARCHAR(32) NOT NULL COMMENT '语义化版本号 (如 v1.3.0)',
+                                              `title` VARCHAR(128) NOT NULL COMMENT '更新标题',
+                                              `type` VARCHAR(16) NOT NULL DEFAULT 'FEAT' COMMENT '更新类型: FEAT / OPTIMIZE / FIX / NOTICE',
+                                              `content` TEXT NOT NULL COMMENT 'Markdown格式详细更新说明',
+                                              `release_date` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '自定义展示发布时间',
+                                              `author_id` BIGINT NOT NULL COMMENT '发布者ROOT用户ID (对应 tb_user.id)',
+                                              `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记: 0-正常, 1-已删除',
+                                              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+                                              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+                                              PRIMARY KEY (`id`),
+                                              KEY `idx_deleted_release` (`is_deleted`, `release_date` DESC, `id` DESC),
+                                              KEY `idx_deleted_type_release` (`is_deleted`, `type`, `release_date` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统更新日志与版本演进表';

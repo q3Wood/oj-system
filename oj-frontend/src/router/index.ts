@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
     name: 'ContestProblemSolve',
     component: () => import('../views/contest/ContestProblemSolve.vue')
   },
+  {
+    path: '/changelog',
+    name: 'Changelog',
+    component: () => import('../views/changelog/Changelog.vue'),
+    meta: { title: '更新日志' }
+  },
 
   // ================= 后台独立管理系统路由 (受权限保护) =================
   {

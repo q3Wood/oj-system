@@ -175,4 +175,27 @@ export interface AiAnalysisReport {
   }
 }
 
+// 15. 系统更新日志类型定义
+export type ChangelogType = 'FEAT' | 'OPTIMIZE' | 'FIX' | 'NOTICE'
+// 16. 系统更新日志结构定义
+export interface Changelog {
+  id: number
+  version: string
+  title: string
+  type: ChangelogType
+  content: string
+  releaseDate: string
+  authorId: number
+  authorName: string
+  createdAt: string
+}
+
+// 17. 最新系统更新日志结构定义
+export interface ChangelogLatest {
+  id: number
+  version: string
+  title: string
+  type: ChangelogType
+  releaseDate: string
+}
 

@@ -1,5 +1,7 @@
 package com.oj.backend.service;
 
+import com.oj.backend.dto.GenVerifyRequestDTO;
+import com.oj.backend.dto.GenVerifyResultDTO;
 import com.oj.backend.dto.JudgeResultDTO;
 
 public interface JudgeService {
@@ -15,4 +17,8 @@ public interface JudgeService {
      */
     JudgeResultDTO executeJudge(Long problemId, String language, String code,
                                 Integer timeLimitMs, Integer memoryLimitMb);
+
+    public GenVerifyResultDTO executeGenVerify(GenVerifyRequestDTO req);
+
+
 }

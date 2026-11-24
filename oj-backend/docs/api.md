@@ -1362,3 +1362,384 @@ GET /api/problem/list?pageNum=1&pageSize=10&title=动态规划&isPublic=1
   "data": true
 }
 ```
+
+## 6. 系统更新日志模块接口 (Changelog)
+
+> **模块基础路径**：`/api/changelog`  
+> **后台管理子路径**：`/api/changelog/admin/**`  
+> **全局响应结构**：所有接口统一返回 `Result<T>` 包装结构（`code`: `0` 表示成功，`1` 表示业务失败，`401` 表示未登录，`403` 表示无权限）。  
+> **权限铁律**：列表与最新摘要接口对全网（含游客）公开只读；所有增、删、改写操作**严格仅限 `ROOT` 超级管理员**执行（普通 `ADMIN` 亦无权操作）。
+
+---
+
+### 6.1 分页获取更新日志时间轴列表
+- **接口路径**：`GET /api/changelog/list`
+- **请求头 (Headers)**：
+  - `Authorization`: **非必须**（游客与登录用户均可自由浏览全站演进日志）
+- **排序规则**：严格按照 `release_date DESC, id DESC` 倒序排列（最新发布的版本展示在时间轴最顶端）。
+- **请求 Query 参数说明 (`ChangelogQueryDTO`)**：
+
+| 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| pageNum | number | 非必须 | `1` | 当前页码，最小值为 `1` |
+| pageSize | number | 非必须 | `20` | 每页显示条数，允许范围 `1 ~ 100` |
+| type | string | 非必须 | 无 | 按更新类型精准筛选，可选值：`FEAT` (新功能) / `OPTIMIZE` (体验优化) / `FIX` (问题修复) / `NOTICE` (系统公告) |
+
+- **请求 URL 样例**：
+```http
+GET /api/changelog/list?pageNum=1&pageSize=20&type=FEAT
+```
+
+- **响应数据说明 (`Result<PageResult<ChangelogVO>>`)**：
+
+| 字段名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| code | number | 必须 | 响应状态码：`0`-成功，`1`-失败 |
+| message | string | 必须 | 提示信息 |
+| data | object | 必须 | **分页结果包装对象 (`PageResult<ChangelogVO>`)** |
+| ├─ total | number | 必须 | 满足筛选条件的总日志条数 |
+| └─ items | array | 必须 | 当前页更新日志列表 (`List<ChangelogVO>`) |
+| &emsp;&emsp;├─ id | number | 必须 | 更新日志唯一主键 ID (`Long`) |
+| &emsp;&emsp;├─ version | string | 必须 | 语义化版本号（如 `"v1.3.0"`） |
+| &emsp;&emsp;├─ title | string | 必须 | 更新大标题 |
+| &emsp;&emsp;├─ type | string | 必须 | 更新类型枚举：`FEAT` / `OPTIMIZE` / `FIX` / `NOTICE` |
+| &emsp;&emsp;├─ content | string | 必须 | Markdown 格式的详细更新说明 |
+| &emsp;&emsp;├─ releaseDate | string | 必须 | 发布展示时间，格式：`yyyy-MM-dd HH:mm:ss` (GMT+8) |
+| &emsp;&emsp;├─ authorId | number | 必须 | 发布者用户 ID |
+| &emsp;&emsp;├─ authorName | string | 必须 | 发布者用户名 |
+| &emsp;&emsp;└─ createdAt | string | 必须 | 记录入库创建时间 (`yyyy-MM-dd HH:mm:ss`) |
+
+- **成功响应样例**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "total": 2,
+    "items": [
+      {
+        "id": 2,
+        "version": "v1.3.0",
+        "title": "AI 代码导师正式上线，支持时空复杂度独立诊断",
+        "type": "FEAT",
+        "content": "- 接入 FastAPI + LangChain + ChromaDB (RAG) 异构推理微服务\n- 评测详情页新增力扣同款时间/空间复杂度胶囊切换卡片\n- 落地 Redis 分布式防重锁与普通用户每日 20 次配额限流",
+        "releaseDate": "2026-11-18 22:00:00",
+        "authorId": 1,
+        "authorName": "root",
+        "createdAt": "2026-11-21 15:00:00"
+      },
+      {
+        "id": 1,
+        "version": "v1.0.0",
+        "title": "Core OJ 在线判题系统正式发布",
+        "type": "FEAT",
+        "content": "- 上线 C++17 原生 Linux 安全判题沙箱与五重资源限制\n- 上线基于 Redis List 的异步判题队列与重启防丢单恢复机制",
+        "releaseDate": "2026-10-12 12:00:00",
+        "authorId": 1,
+        "authorName": "root",
+        "createdAt": "2026-11-21 14:50:00"
+      }
+    ]
+  }
+}
+```
+
+- **失败响应样例 (非法分页参数)**：
+```json
+{
+  "code": 1,
+  "message": "每页显示条数必须在 1 ~ 100 之间！",
+  "data": null
+}
+```
+
+---
+
+### 6.2 获取最新一条更新日志摘要 (用于导航栏 NEW 角标检测)
+- **接口路径**：`GET /api/changelog/latest`
+- **请求头 (Headers)**：
+  - `Authorization`: **非必须**（游客与登录用户均可调用）
+- **功能说明**：
+  - 专供前端顶部导航栏初始化时调用，返回 `release_date` 最新的一条有效日志摘要（后端走 Redis 缓存 `oj:changelog:latest`，极速响应且零数据库压力）。
+  - 前端结合 `releaseDate`（是否在近 7 天内）与本地 `localStorage` 中记录的已读日志 ID (`oj_read_changelog_id`)，自动决定是否点亮或消除导航栏上的 **`NEW`** 提示角标。
+- **请求参数说明**：无
+- **响应数据说明 (`Result<ChangelogLatestVO>`)**：
+
+| 字段名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| code | number | 必须 | 响应状态码：`0`-成功，`1`-失败 |
+| message | string | 必须 | 提示信息 |
+| data | object \| null | 必须 | 最新日志摘要对象 (`ChangelogLatestVO`)；若全站尚未发布任何日志，则返回 `null` |
+| ├─ id | number | 必须 | 最新日志唯一主键 ID |
+| ├─ version | string | 必须 | 最新版本号 (如 `"v1.3.0"`) |
+| ├─ title | string | 必须 | 最新更新标题 |
+| ├─ type | string | 必须 | 更新类型：`FEAT` / `OPTIMIZE` / `FIX` / `NOTICE` |
+| └─ releaseDate | string | 必须 | 发布时间 (`yyyy-MM-dd HH:mm:ss`) |
+
+- **成功响应样例 (存在更新日志)**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "id": 2,
+    "version": "v1.3.0",
+    "title": "AI 代码导师正式上线，支持时空复杂度独立诊断",
+    "type": "FEAT",
+    "releaseDate": "2026-11-18 22:00:00"
+  }
+}
+```
+
+- **成功响应样例 (全站暂无任何更新日志)**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": null
+}
+```
+
+---
+
+### 6.3 发布系统更新日志 (需 ROOT 权限)
+- **接口路径**：`POST /api/changelog/admin`
+- **请求头 (Headers)**：
+  - `Authorization`: `Bearer <Token>` (当前登录用户必须拥有 **`ROOT`** 角色)
+  - `Content-Type`: `application/json`
+- **副作用说明**：发布成功后，后端自动主动删除 Redis 缓存 `oj:changelog:latest`，确保所有在线用户下次刷新即可感知到最新版本的 `NEW` 提示。
+- **请求参数说明 (JSON Body - `ChangelogCreateDTO`)**：
+
+| 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| version | string | 必须 | 无 | 版本号，长度 `1 ~ 32` 位非空字符（推荐格式 `vX.Y.Z`） |
+| title | string | 必须 | 无 | 更新标题，长度 `1 ~ 128` 位非空字符 |
+| type | string | 必须 | 无 | 更新类型枚举，正则校验仅允许：`FEAT` / `OPTIMIZE` / `FIX` / `NOTICE` |
+| content | string | 必须 | 无 | Markdown 格式更新正文 (非空) |
+| releaseDate | string | **非必须** | 当前时间 | 自定义发布时间 (`yyyy-MM-dd HH:mm:ss`)。用于补录历史版本里程碑；不传则默认取服务器当前时间 |
+
+- **请求样例**：
+```json
+{
+  "version": "v1.4.0",
+  "title": "新增系统更新日志时间轴与版本演进提醒",
+  "type": "FEAT",
+  "content": "- 全站顶部导航栏新增「更新日志」时间轴页面\n- 支持近 7 天新版本 `NEW` 智能红点提示，阅读后自动消隐\n- 仅限 ROOT 超级管理员维护与补录历史版本",
+  "releaseDate": "2026-11-21 16:00:00"
+}
+```
+
+- **响应数据说明 (`Result<ChangelogVO>`)**：返回创建成功的完整更新日志视图对象 (`ChangelogVO`，字段同 6.1)。
+- **成功响应样例**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "id": 3,
+    "version": "v1.4.0",
+    "title": "新增系统更新日志时间轴与版本演进提醒",
+    "type": "FEAT",
+    "content": "- 全站顶部导航栏新增「更新日志」时间轴页面\n- 支持近 7 天新版本 `NEW` 智能红点提示，阅读后自动消隐\n- 仅限 ROOT 超级管理员维护与补录历史版本",
+    "releaseDate": "2026-11-21 16:00:00",
+    "authorId": 1,
+    "authorName": "root",
+    "createdAt": "2026-11-21 16:00:05"
+  }
+}
+```
+
+- **失败响应样例 1 (非 ROOT 用户越权访问)**：
+```json
+{
+  "code": 403,
+  "message": "权限不足！只有 ROOT 超级管理员有权发布系统更新日志。",
+  "data": null
+}
+```
+
+- **失败响应样例 2 (参数校验不通过)**：
+```json
+{
+  "code": 1,
+  "message": "更新类型不合法，仅支持 FEAT / OPTIMIZE / FIX / NOTICE！",
+  "data": null
+}
+```
+
+---
+
+### 6.4 编辑修改更新日志 (需 ROOT 权限)
+- **接口路径**：`PUT /api/changelog/admin/{id}`
+- **请求头 (Headers)**：
+  - `Authorization`: `Bearer <Token>` (必须拥有 **`ROOT`** 角色)
+  - `Content-Type`: `application/json`
+- **路径参数说明 (Path Variable)**：
+
+| 参数名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| id | number | 必须 | 目标更新日志的唯一主键 ID (如 `/api/changelog/admin/3`) |
+
+- **副作用说明**：修改成功后，后端自动清除 Redis 缓存 `oj:changelog:latest`。
+- **请求参数说明 (JSON Body - `ChangelogUpdateDTO`)**：
+
+| 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| version | string | 必须 | 无 | 修改后的版本号 (`1 ~ 32` 字符) |
+| title | string | 必须 | 无 | 修改后的更新标题 (`1 ~ 128` 字符) |
+| type | string | 必须 | 无 | 修改后的更新类型：`FEAT` / `OPTIMIZE` / `FIX` / `NOTICE` |
+| content | string | 必须 | 无 | 修改后的 Markdown 更新正文 (非空) |
+| releaseDate | string | 非必须 | 保持原值 | 修改后的发布时间 (`yyyy-MM-dd HH:mm:ss`)，不传则保持原发布时间不变 |
+
+- **请求样例**：
+```json
+{
+  "version": "v1.4.0",
+  "title": "新增系统更新日志时间轴与智能 NEW 提示",
+  "type": "FEAT",
+  "content": "- 全站新增垂直时间轴展示系统版本演进历程\n- 修复部分样式细节",
+  "releaseDate": "2026-11-21 16:00:00"
+}
+```
+
+- **响应数据说明 (`Result<ChangelogVO>`)**：返回修改后的完整更新日志视图对象 (`ChangelogVO`)。
+- **成功响应样例**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "id": 3,
+    "version": "v1.4.0",
+    "title": "新增系统更新日志时间轴与智能 NEW 提示",
+    "type": "FEAT",
+    "content": "- 全站新增垂直时间轴展示系统版本演进历程\n- 修复部分样式细节",
+    "releaseDate": "2026-11-21 16:00:00",
+    "authorId": 1,
+    "authorName": "root",
+    "createdAt": "2026-11-21 16:00:05"
+  }
+}
+```
+
+- **失败响应样例 1 (日志不存在或已被逻辑删除)**：
+```json
+{
+  "code": 1,
+  "message": "更新日志不存在或已被删除！(ID: 999)",
+  "data": null
+}
+```
+
+- **失败响应样例 2 (非 ROOT 用户越权访问)**：
+```json
+{
+  "code": 403,
+  "message": "权限不足！只有 ROOT 超级管理员有权修改系统更新日志。",
+  "data": null
+}
+```
+
+---
+
+### 6.5 删除更新日志 (逻辑软删除，需 ROOT 权限)
+- **接口路径**：`DELETE /api/changelog/admin/{id}`
+- **请求头 (Headers)**：
+  - `Authorization`: `Bearer <Token>` (必须拥有 **`ROOT`** 角色)
+- **路径参数说明 (Path Variable)**：
+
+| 参数名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| id | number | 必须 | 要删除的更新日志唯一主键 ID (如 `/api/changelog/admin/3`) |
+
+- **功能说明**：执行逻辑软删除（将数据库的 `is_deleted` 置为 `1`），并自动清除 Redis 缓存 `oj:changelog:latest`，使最新摘要自动回退至上一条有效日志。
+- **响应数据说明 (`Result<Void>`)**：
+
+| 字段名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| code | number | 必须 | 响应状态码：`0`-成功，`1`-失败，`403`-权限不足 |
+| message | string | 必须 | 提示信息 |
+| data | null | 必须 | 固定为 `null` |
+
+- **成功响应样例**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": null
+}
+```
+
+- **失败响应样例 1 (记录不存在或已被删除)**：
+```json
+{
+  "code": 1,
+  "message": "更新日志不存在或已被删除！(ID: 3)",
+  "data": null
+}
+```
+
+- **失败响应样例 2 (非 ROOT 用户越权访问)**：
+```json
+{
+  "code": 403,
+  "message": "权限不足！只有 ROOT 超级管理员有权删除系统更新日志。",
+  "data": null
+}
+```
+
+---
+
+
+## 7. AI 智能造题与沙箱对拍模块接口 (V2.0)
+
+### 7.1 内部沙箱造题对拍与验题接口 (仅供 Python `oj-agent` 内网调用)
+- **接口路径**: `POST /api/internal/judge/gen-verify`
+- **请求头 (Headers)**:
+  - `Content-Type`: `application/json`
+- **副作用说明**: 在 `{problemsDir}/_drafts/{task_id}/` 隔离目录下生成 `.in` 与 `.out` 测试点草稿文件；执行完毕后自动清理 `/tmp` 下的临时源码与计划文件。
+- **请求参数说明 (JSON Body - `GenVerifyRequestDTO`, snake_case 契约)**:
+
+| 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| task_id | string | 必须 | 无 | 造题任务唯一标识（如 `draft_1045_a1b2`，仅允许字母/数字/下划线） |
+| time_limit_ms | number | 必须 | `1000` | 标程与暴力解单点 CPU 时间限制（`100 ~ 5000` ms） |
+| memory_limit_mb | number | 必须 | `256` | 标程与暴力解单点物理内存限制（`16 ~ 512` MB） |
+| gen_code | string | 必须 | 无 | C++ 数据生成器源码 (`gen.cpp`)，通过 `argc/argv` 接收参数并输出至 `stdout` |
+| std_code | string | 必须 | 无 | C++ 最优标程源码 (`std.cpp`) |
+| brute_code | string | 必须 | 无 | C++ 暴力对拍源码 (`brute.cpp`) |
+| test_plan | array | 必须 | 无 | 测试点生成与对拍策略数组（`1 ~ 20` 组），元素结构见下表 |
+
+- **`test_plan` 数组元素结构 (`TestPlanItemDTO`)**:
+
+| 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| id | number | 必须 | 无 | 测试点序号（`1, 2, ...`） |
+| args | array\<string\> | 必须 | `[]` | 传递给 `./gen_bin` 的命令行参数列表（如 `["1000", "105"]`） |
+| check_brute | boolean | 必须 | `true` | 是否在该测试点运行 `brute.cpp` 对拍 |
+| expect_brute_fail | boolean | 必须 | `false` | `false`: 小数据严格比对输出一致；`true`: 极限数据期望暴力解超时/超内存 |
+
+- **响应样例 (对拍捕获标程 Bug 时的 Fail-Fast 返回)**:
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "passed": false,
+    "stage": "STRESS_DIFF",
+    "failed_target": "std",
+    "failed_case_id": 3,
+    "verdict": "Wrong Answer",
+    "message": "Output mismatch between std and brute on case #3",
+    "compile_log": null,
+    "input_snippet": "4\nbanana\napple\npear\norange\n",
+    "std_output_snippet": "banana\napple\norange\npear\n",
+    "brute_output_snippet": "apple\nbanana\norange\npear\n",
+    "max_time_ms": 4,
+    "peak_memory_kb": 3328,
+    "brute_blocked": true
+  }
+}
+
+
+

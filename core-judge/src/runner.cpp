@@ -91,10 +91,20 @@ ExecutionResult SandboxRunner::run(const SandboxConfig& config) {
         }
 
         // 1.4 执行目标程序
-        char* args[] = { const_cast<char*>(config.exe_path.c_str()), nullptr };
-        char* envp[] = { nullptr }; // 清空环境变量
-        execve(config.exe_path.c_str(), args, envp);
+        // char* args[] = { const_cast<char*>(config.exe_path.c_str()), nullptr };
+        // char* envp[] = { nullptr }; // 清空环境变量
+        // execve(config.exe_path.c_str(), args, envp);
 
+        // 1.4 执行目标程序 (组装 argv，支持向 gen_bin 传递命令行参数)
+        std::vector<char*> argv_ptrs;
+        argv_ptrs.push_back(const_cast<char*>(config.exe_path.c_str()));
+        for (const auto& arg : config.args) {
+            argv_ptrs.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv_ptrs.push_back(nullptr);
+
+        char* envp[] = { nullptr }; // 清空环境变量
+        execve(config.exe_path.c_str(), argv_ptrs.data(), envp);
         // execve 只有失败才会执行到这里
         _exit(127);
     } else {
