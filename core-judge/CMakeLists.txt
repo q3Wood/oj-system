@@ -17,6 +17,8 @@ set(SOURCES
     src/compiler.cpp
     src/runner.cpp
     src/checker.cpp
+    src/judge_engine.cpp
+    src/gen_verifier.cpp
 )
 
 # 生成可执行文件

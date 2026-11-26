@@ -222,7 +222,7 @@
              --gen-src /tmp/gen_xxx.cpp \
              --std-src /tmp/std_xxx.cpp \
              --brute-src /tmp/brute_xxx.cpp \
-             --plan /tmp/plan_xxx.json \
+             --plan /tmp/plan_xxx.txt \
              --time 1000 --mem 256 --json
   ```
 - **测试计划描述文件 (`--plan`) 零依赖行协议**：

@@ -74,7 +74,7 @@ public class LoginInterceptor implements HandlerInterceptor {
         }
 
         // 5. (可选增强) 统一拦截 /api/*/admin/** 后台路径，防止普通 USER 越权访问任何模块的后台接口
-        if (uri.contains("/admin/")) {
+        if (uri.contains("/admin/") || uri.contains("/admin")) {
             String role = UserContext.getRole();
             if (!"ADMIN".equalsIgnoreCase(role) && !"ROOT".equalsIgnoreCase(role)) {
                 throw new BusinessException("权限不足！禁止访问后台管理接口。");
@@ -100,7 +100,8 @@ public class LoginInterceptor implements HandlerInterceptor {
                 || uri.startsWith("/api/contest/list")
                 || uri.startsWith("/api/contest/") && uri.endsWith("/ranklist")
                 || uri.startsWith("/api/submission/list")
-                || uri.startsWith("/api/solution");
+                || uri.startsWith("/api/solution")
+                || uri.startsWith("/api/changelog/latest");
     }
 
     @Override

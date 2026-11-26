@@ -4,11 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.backend.common.BusinessException;
+import com.oj.backend.common.RedisConstants;
 import com.oj.backend.common.UserContext;
 import com.oj.backend.dto.AgentAnalyzeRequestDTO;
 import com.oj.backend.entity.*;
 import com.oj.backend.mapper.*;
 import com.oj.backend.service.AiCoachService;
+import com.oj.backend.utils.RedisCacheClient;
 import com.oj.backend.vo.AiAnalysisReportVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,14 +34,6 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class AiCoachServiceImpl implements AiCoachService {
 
-    private static final String LOCK_KEY_PREFIX = "lock:ai:analyze:";
-    private static final String DAILY_QUOTA_KEY_PREFIX = "limit:ai:daily:";
-    private static final int MAX_DAILY_QUOTA = 20;
-
-//    @Value("${oj.ai.agent-url:http://127.0.0.1:8000/api/v1/analyze}")
-//    private String agentAnalyzeUrl;
-
-    // 1. 替换 AiCoachServiceImpl 顶部的 @Value 注解：
     @Value("${oj.agent.base-url:http://127.0.0.1:8000}")
     private String agentBaseUrl;
 
@@ -47,7 +42,6 @@ public class AiCoachServiceImpl implements AiCoachService {
 
     @Value("${oj.agent.read-timeout-ms:35000}")
     private long readTimeoutMs;
-
 
     @Autowired
     private SubmissionMapper submissionMapper;
@@ -71,9 +65,11 @@ public class AiCoachServiceImpl implements AiCoachService {
     private StringRedisTemplate stringRedisTemplate;
 
     @Autowired
+    private RedisCacheClient redisCacheClient;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
-    // 复用 JDK 原生 HttpClient，连接超时 5s
     private final HttpClient httpClient = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(5))
@@ -81,7 +77,7 @@ public class AiCoachServiceImpl implements AiCoachService {
 
     @Override
     public AiAnalysisReportVO analyzeSubmission(Long submissionId) {
-        // ==================== 1. 登录与基础实体校验 ====================
+        // 1. 登录与基础实体校验
         Long currentUserId = UserContext.getUserId();
         if (currentUserId == null) {
             throw new BusinessException(401, "请先登录后再使用 AI 代码诊断功能！");
@@ -97,12 +93,11 @@ public class AiCoachServiceImpl implements AiCoachService {
                 ("ADMIN".equals(currentUser.getRole()) || "ROOT".equals(currentUser.getRole()));
         boolean isSelf = submission.getUserId().equals(currentUserId);
 
-        // 规矩 1：触发所有权限制（仅限提交者本人或管理员触发消耗 Token）
         if (!isSelf && !isAdmin) {
             throw new BusinessException(403, "权限不足：仅允许对您本人的提交记录发起 AI 代码诊断！");
         }
 
-        // ==================== 2. 赛事与保密题防作弊红线 ====================
+        // 2. 赛事与保密题防作弊红线
         Problem problem = problemMapper.selectById(submission.getProblemId());
         if (problem == null) {
             throw new BusinessException("关联题目不存在！(ID: " + submission.getProblemId() + ")");
@@ -121,57 +116,59 @@ public class AiCoachServiceImpl implements AiCoachService {
             }
         }
 
-        // ==================== 3. 评测终态前置校验 ====================
+        // 3. 评测终态前置校验
         String verdict = submission.getVerdict();
         if (verdict == null || "PENDING".equalsIgnoreCase(verdict) || "RUNNING".equalsIgnoreCase(verdict)) {
             throw new BusinessException("代码尚在排队或评测中，请等待评测出结果后再请求 AI 诊断！");
         }
 
-        // ==================== 4. 幂等查询：若已生成过报告则直接返回 ====================
+        // 4. 幂等查询：若已生成过报告则直接返回
         AiAnalysis existingAnalysis = getBySubmissionId(submissionId);
         if (existingAnalysis != null && existingAnalysis.getRawReport() != null) {
             return parseRawReport(existingAnalysis.getRawReport());
         }
 
-        // ==================== 5. 每日配额前置检查 (普通用户 20 次/天) ====================
-        String todayStr = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE); // yyyyMMdd
-        String quotaKey = DAILY_QUOTA_KEY_PREFIX + todayStr + ":" + currentUserId;
+        // 5. 每日配额前置检查 (普通用户 20 次/天)
+        String todayStr = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String quotaKey = RedisConstants.AI_DAILY_QUOTA_PREFIX + todayStr + ":" + currentUserId;
         if (!isAdmin) {
             String usedCountStr = stringRedisTemplate.opsForValue().get(quotaKey);
             int usedCount = usedCountStr == null ? 0 : Integer.parseInt(usedCountStr);
-            if (usedCount >= MAX_DAILY_QUOTA) {
-                throw new BusinessException("您今日的 AI 代码诊断次数已达上限 (" + MAX_DAILY_QUOTA + "/" + MAX_DAILY_QUOTA + ")，请明日再来！");
+            if (usedCount >= RedisConstants.AI_MAX_DAILY_QUOTA) {
+                throw new BusinessException("您今日的 AI 代码诊断次数已达上限 ("
+                        + RedisConstants.AI_MAX_DAILY_QUOTA + "/" + RedisConstants.AI_MAX_DAILY_QUOTA + ")，请明日再来！");
             }
         }
 
-        // ==================== 6. Redis 分布式防重短锁 (防双击并发穿透) ====================
-        String lockKey = LOCK_KEY_PREFIX + submissionId;
-        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", 60, TimeUnit.SECONDS);
-        if (Boolean.FALSE.equals(locked)) {
+        // 6. Redis 分布式防重短锁 (UUID + Lua 原子防误删锁)
+        String lockKey = RedisConstants.AI_ANALYZE_LOCK_PREFIX + submissionId;
+        String lockToken = redisCacheClient.tryLock(lockKey, RedisConstants.AI_ANALYZE_LOCK_TTL_SECONDS, TimeUnit.SECONDS);
+        if (lockToken == null) {
             throw new BusinessException("AI 正在全力诊断该份代码中，请勿重复点击！");
         }
 
         try {
-            // 双重检查锁 (Double-Check)：防止前一个并发请求刚刚落库释放锁
+            // 双重检查锁 (Double-Check)
             existingAnalysis = getBySubmissionId(submissionId);
             if (existingAnalysis != null && existingAnalysis.getRawReport() != null) {
                 return parseRawReport(existingAnalysis.getRawReport());
             }
 
-            // ==================== 7. 组装发往 Python Agent 的上下文载荷 ====================
+            // 7. 组装发往 Python Agent 的上下文载荷
             AgentAnalyzeRequestDTO agentReq = buildAgentRequest(submission, problem);
             String requestBodyJson = objectMapper.writeValueAsString(agentReq);
 
+            // 8. 调用 Python FastAPI 微服务
             String fullAnalyzeUrl = agentBaseUrl.endsWith("/")
                     ? agentBaseUrl + "api/v1/analyze"
                     : agentBaseUrl + "/api/v1/analyze";
-            // ==================== 8. 调用 Python FastAPI 微服务 ====================
+
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(fullAnalyzeUrl))
                     .version(HttpClient.Version.HTTP_1_1)
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofMillis(readTimeoutMs)) // 对齐 Python LLM 30s 超时 + 网络开销
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBodyJson))
+                    .header("Content-Type", "application/json; charset=UTF-8")
+                    .timeout(Duration.ofMillis(readTimeoutMs))
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBodyJson, StandardCharsets.UTF_8))
                     .build();
 
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -181,10 +178,9 @@ public class AiCoachServiceImpl implements AiCoachService {
             }
 
             String rawReportJson = response.body();
-            // 利用 @JsonAlias 将下划线 JSON 反序列化为标准小驼峰 VO
             AiAnalysisReportVO reportVO = objectMapper.readValue(rawReportJson, AiAnalysisReportVO.class);
 
-            // ==================== 9. 持久化落库 tb_ai_analysis ====================
+            // 9. 持久化落库 tb_ai_analysis
             AiAnalysis entity = AiAnalysis.builder()
                     .submissionId(submission.getId())
                     .userId(submission.getUserId())
@@ -202,11 +198,10 @@ public class AiCoachServiceImpl implements AiCoachService {
             try {
                 aiAnalysisMapper.insert(entity);
             } catch (DuplicateKeyException e) {
-                // 极端并发兜底：唯一索引冲突说明已有记录落库，直接忽略异常
                 log.warn("tb_ai_analysis 唯一索引兜底触发, submissionId={}", submissionId);
             }
 
-            // ==================== 10. 成功后递增用户今日配额计数器 ====================
+            // 10. 成功后递增用户今日配额计数器
             if (!isAdmin) {
                 Long currentCount = stringRedisTemplate.opsForValue().increment(quotaKey);
                 if (currentCount != null && currentCount == 1L) {
@@ -222,14 +217,11 @@ public class AiCoachServiceImpl implements AiCoachService {
             log.error("调用 AI 代码诊断微服务异常, submissionId={}", submissionId, e);
             throw new BusinessException("AI 诊断服务连接超时或异常，请稍后重试！（原因：" + e.getMessage() + "）");
         } finally {
-            // 无论成功或异常，确保释放分布式锁
-            stringRedisTemplate.delete(lockKey);
+            // 使用 Lua 脚本安全校验 UUID 凭证并释放锁
+            redisCacheClient.unlock(lockKey, lockToken);
         }
     }
 
-    /**
-     * 辅助方法：根据 submissionId 查询已存在的 AI 报告
-     */
     private AiAnalysis getBySubmissionId(Long submissionId) {
         return aiAnalysisMapper.selectOne(
                 new LambdaQueryWrapper<AiAnalysis>()
@@ -237,9 +229,6 @@ public class AiCoachServiceImpl implements AiCoachService {
         );
     }
 
-    /**
-     * 辅助方法：将数据库中的 raw_report 字符串反序列化为 AiAnalysisReportVO
-     */
     private AiAnalysisReportVO parseRawReport(String rawReport) {
         try {
             return objectMapper.readValue(rawReport, AiAnalysisReportVO.class);
@@ -249,20 +238,15 @@ public class AiCoachServiceImpl implements AiCoachService {
         }
     }
 
-    /**
-     * 辅助方法：组装发往 Python Agent 的请求体 (含报错信息提取与最高赞题解检索)
-     */
     private AgentAnalyzeRequestDTO buildAgentRequest(Submission submission, Problem problem) {
         String errorMessage = null;
         String judgeDetails = submission.getJudgeDetails();
         String verdict = submission.getVerdict();
 
-        // 若非 Accepted，提取 judgeDetails 中的编译错误日志或失败测试点摘要供 AI 诊断参考
         if (!"Accepted".equalsIgnoreCase(verdict) && judgeDetails != null && !judgeDetails.isBlank()) {
             try {
                 JsonNode rootNode = objectMapper.readTree(judgeDetails);
                 if (rootNode.isArray()) {
-                    // 遍历测试点数组，找到第一个非 Accepted 的测试点信息（兼容真实评测机的 id / time_ms / memory_kb 字段）
                     for (JsonNode caseNode : rootNode) {
                         String caseVerdict = caseNode.path("verdict").asText("");
                         if (!"Accepted".equalsIgnoreCase(caseVerdict)) {
@@ -279,12 +263,10 @@ public class AiCoachServiceImpl implements AiCoachService {
                     errorMessage = judgeDetails;
                 }
             } catch (Exception e) {
-                // 若 judgeDetails 不是 JSON（如纯文本编译エラー日志 CE），直接原样作为 errorMessage 传入
                 errorMessage = judgeDetails.length() > 2000 ? judgeDetails.substring(0, 2000) : judgeDetails;
             }
         }
 
-        // 尝试从题解表 (tb_solution) 中捞取本题点赞数最高的一篇题解作为 RAG 参考思路 (official_editorial)
         String editorial = null;
         try {
             Solution topSolution = solutionMapper.selectOne(

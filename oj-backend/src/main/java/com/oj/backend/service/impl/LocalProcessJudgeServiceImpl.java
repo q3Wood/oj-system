@@ -92,6 +92,12 @@ public class LocalProcessJudgeServiceImpl implements JudgeService {
 
         try {
             Files.createDirectories(draftProbDir);
+            // 清理该草稿目录上一轮重试残留的旧 .in/.out 文件，确保每次验证产物纯净
+            try (var stream = Files.list(draftProbDir)) {
+                stream.filter(Files::isRegularFile).forEach(p -> {
+                    try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                });
+            }
             Files.writeString(genPath, req.getGenCode());
             Files.writeString(stdPath, req.getStdCode());
             Files.writeString(brutePath, req.getBruteCode());

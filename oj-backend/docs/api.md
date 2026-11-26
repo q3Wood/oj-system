@@ -1694,15 +1694,15 @@ GET /api/changelog/list?pageNum=1&pageSize=20&type=FEAT
 ## 7. AI 智能造题与沙箱对拍模块接口 (V2.0)
 
 ### 7.1 内部沙箱造题对拍与验题接口 (仅供 Python `oj-agent` 内网调用)
-- **接口路径**: `POST /api/internal/judge/gen-verify`
-- **请求头 (Headers)**:
+- **接口路径**：`POST /api/internal/judge/gen-verify`
+- **请求头 (Headers)**：
   - `Content-Type`: `application/json`
-- **副作用说明**: 在 `{problemsDir}/_drafts/{task_id}/` 隔离目录下生成 `.in` 与 `.out` 测试点草稿文件；执行完毕后自动清理 `/tmp` 下的临时源码与计划文件。
-- **请求参数说明 (JSON Body - `GenVerifyRequestDTO`, snake_case 契约)**:
+- **副作用说明**：在 `{problemsDir}/_drafts/{task_id}/` 隔离目录下生成 `.in` 与 `.out` 测试点草稿文件；执行完毕后在 `finally` 块自动销毁 `/tmp` 下的临时源码与计划文件。
+- **请求参数说明 (JSON Body - `GenVerifyRequestDTO`, snake_case 契约)**：
 
 | 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
 | :--- | :--- | :--- | :--- | :--- |
-| task_id | string | 必须 | 无 | 造题任务唯一标识（如 `draft_1045_a1b2`，仅允许字母/数字/下划线） |
+| task_id | string | 必须 | 无 | 造题任务唯一标识，正则仅允许 `^[a-zA-Z0-9_-]{1,64}$`（防路径穿越） |
 | time_limit_ms | number | 必须 | `1000` | 标程与暴力解单点 CPU 时间限制（`100 ~ 5000` ms） |
 | memory_limit_mb | number | 必须 | `256` | 标程与暴力解单点物理内存限制（`16 ~ 512` MB） |
 | gen_code | string | 必须 | 无 | C++ 数据生成器源码 (`gen.cpp`)，通过 `argc/argv` 接收参数并输出至 `stdout` |
@@ -1710,7 +1710,7 @@ GET /api/changelog/list?pageNum=1&pageSize=20&type=FEAT
 | brute_code | string | 必须 | 无 | C++ 暴力对拍源码 (`brute.cpp`) |
 | test_plan | array | 必须 | 无 | 测试点生成与对拍策略数组（`1 ~ 20` 组），元素结构见下表 |
 
-- **`test_plan` 数组元素结构 (`TestPlanItemDTO`)**:
+- **`test_plan` 数组元素结构 (`TestPlanItemDTO`)**：
 
 | 参数名 | 类型 | 是否必须 | 默认值 | 校验规则与备注 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1719,27 +1719,91 @@ GET /api/changelog/list?pageNum=1&pageSize=20&type=FEAT
 | check_brute | boolean | 必须 | `true` | 是否在该测试点运行 `brute.cpp` 对拍 |
 | expect_brute_fail | boolean | 必须 | `false` | `false`: 小数据严格比对输出一致；`true`: 极限数据期望暴力解超时/超内存 |
 
-- **响应样例 (对拍捕获标程 Bug 时的 Fail-Fast 返回)**:
+- **请求样例**：
 ```json
 {
-  "code": 200,
-  "message": "success",
+  "task_id": "draft_test_01",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "gen_code": "#include <iostream>\n#include <cstdlib>\nint main(int argc, char* argv[]) { std::cout << argv[1] << \"\\n\"; return 0; }",
+  "std_code": "#include <iostream>\nint main() { int n; std::cin >> n; std::cout << n * 2 << \"\\n\"; return 0; }",
+  "brute_code": "#include <iostream>\nint main() { int n; std::cin >> n; int s = 0; for(int i=0;i<n;i++) s += 2; std::cout << s << \"\\n\"; return 0; }",
+  "test_plan": [
+    { "id": 1, "args": ["5"], "check_brute": true, "expect_brute_fail": false },
+    { "id": 2, "args": ["10"], "check_brute": true, "expect_brute_fail": false }
+  ]
+}
+```
+
+- **响应数据说明 (`Result<GenVerifyResultDTO>`)**：
+
+| 字段名 | 类型 | 是否必须 | 备注 |
+| :--- | :--- | :--- | :--- |
+| passed | boolean | 必须 | 全部测试点是否造数并对拍通过：`true`-通过，`false`-中断失败 |
+| stage | string | 必须 | 终态阶段：`COMPILE` / `GEN_DATA` / `RUN_STD` / `STRESS_DIFF` / `DONE` |
+| failed_target | string | 非必须 | 失败责任方源码：`gen` / `std` / `brute`（全部通过时为 `null`） |
+| failed_case_id | number | 非必须 | 首个失败的测试点编号（编译阶段或全部通过时为 `null`） |
+| verdict | string | 必须 | 评测状态码：`Accepted` / `Wrong Answer` / `Compile Error` / `Time Limit Exceeded` 等 |
+| message | string | 必须 | 详细诊断说明 |
+| compile_log | string | 非必须 | `g++` 编译错误日志（仅 `stage == COMPILE` 时非空） |
+| input_snippet | string | 非必须 | 失败测试点的输入数据前 500 字节切片 |
+| std_output_snippet | string | 非必须 | 失败测试点的标程输出前 500 字节切片 |
+| brute_output_snippet | string | 非必须 | 失败测试点的暴力解输出前 500 字节切片 |
+| max_time_ms | number | 必须 | 标程在各测试点中的最大 CPU 耗时 (ms) |
+| peak_memory_kb | number | 必须 | 标程在各测试点中的峰值物理内存 (KB) |
+| brute_blocked | boolean | 必须 | 极限测试点是否成功拦截暴力解（触发 TLE/MLE） |
+
+- **成功响应样例 1 (全部测试点对拍通过)**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
+  "data": {
+    "passed": true,
+    "stage": "DONE",
+    "failed_target": null,
+    "failed_case_id": null,
+    "verdict": "Accepted",
+    "message": "All test cases generated and verified successfully.",
+    "compile_log": null,
+    "input_snippet": null,
+    "std_output_snippet": null,
+    "brute_output_snippet": null,
+    "max_time_ms": 2,
+    "peak_memory_kb": 3240,
+    "brute_blocked": true
+  }
+}
+```
+
+- **成功响应样例 2 (对拍捕获标程 Bug 时的 Fail-Fast 返回)**：
+```json
+{
+  "code": 0,
+  "message": "操作成功",
   "data": {
     "passed": false,
     "stage": "STRESS_DIFF",
     "failed_target": "std",
-    "failed_case_id": 3,
+    "failed_case_id": 2,
     "verdict": "Wrong Answer",
-    "message": "Output mismatch between std and brute on case #3",
+    "message": "Output mismatch between std and brute on case #2",
     "compile_log": null,
-    "input_snippet": "4\nbanana\napple\npear\norange\n",
-    "std_output_snippet": "banana\napple\norange\npear\n",
-    "brute_output_snippet": "apple\nbanana\norange\npear\n",
-    "max_time_ms": 4,
-    "peak_memory_kb": 3328,
+    "input_snippet": "10\n",
+    "std_output_snippet": "999\n",
+    "brute_output_snippet": "20\n",
+    "max_time_ms": 1,
+    "peak_memory_kb": 3200,
     "brute_blocked": true
   }
 }
+```
 
-
-
+- **失败响应样例 (非法 task_id 格式触发安全拦截)**：
+```json
+{
+  "code": 1,
+  "message": "非法的 task_id 格式",
+  "data": null
+}
+```
