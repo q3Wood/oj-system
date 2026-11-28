@@ -4,7 +4,7 @@
     <div v-if="!currentSolution" class="solution-list-view">
       <div class="solution-header-bar">
         <span class="sub-title">精选题解 ({{ solutionTotal }})</span>
-        <el-button type="primary" size="small" :icon="Edit" @click="openCreateSolutionDialog">
+        <el-button type="primary" size="small" :icon="Edit" @click="openCreateSolutionDialog" v-if="userStore.userInfo?.role === 'ADMIN' || userStore.userInfo?.role === 'ROOT'">
           写题解
         </el-button>
       </div>

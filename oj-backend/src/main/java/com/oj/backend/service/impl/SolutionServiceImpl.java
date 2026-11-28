@@ -131,6 +131,11 @@ public class SolutionServiceImpl implements SolutionService {
             throw new BusinessException(401, "请先登录后再发布题解！");
         }
 
+        // 合规收口：仅限管理员 (ADMIN / ROOT) 发布官方题解，防止开放式 UGC 风险
+        if (!isAdminOrRoot()) {
+            throw new BusinessException(403, "当前仅支持管理员发布官方题解！");
+        }
+
         Problem problem = problemMapper.selectById(dto.getProblemId());
         if (problem == null) {
             throw new BusinessException("题目不存在！(ID: " + dto.getProblemId() + ")");
@@ -159,6 +164,10 @@ public class SolutionServiceImpl implements SolutionService {
 
     @Override
     public SolutionVO updateSolution(Long id, SolutionUpdateDTO dto) {
+        if (!isAdminOrRoot()) {
+            throw new BusinessException(403, "仅限管理员有权修改官方题解！");
+        }
+
         Solution solution = solutionMapper.selectById(id);
         if (solution == null) {
             throw new BusinessException("题解不存在！(ID: " + id + ")");
@@ -183,6 +192,9 @@ public class SolutionServiceImpl implements SolutionService {
 
     @Override
     public void deleteSolution(Long id) {
+        if (!isAdminOrRoot()) {
+            throw new BusinessException(403, "仅限管理员有权删除官方题解！");
+        }
         Solution solution = solutionMapper.selectById(id);
         if (solution == null) {
             throw new BusinessException("题解不存在！(ID: " + id + ")");
