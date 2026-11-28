@@ -46,17 +46,46 @@
     </el-header>
 
     <el-main class="main">
-      <router-view />
+      <!-- 页面主体内容区域 (自动撑满剩余高度) -->
+      <div class="main-content">
+        <router-view />
+      </div>
+
+      <!-- 全站底部页脚：工信部 ICP 主体备案号（广东省规范） -->
+      <footer class="site-footer">
+        <span>Copyright © 2026 Core OJ</span>
+        <span class="footer-divider">|</span>
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="beian-link"
+        >
+          粤ICP备2026192995号
+        </a>
+        <!-- 后续公安联网备案通过后，可在此取消注释并替换为公安备案图标和编号 -->
+        <!--
+        <span class="footer-divider">|</span>
+        <a
+          href="https://beian.mps.gov.cn/#/query/webSearch"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="beian-link"
+        >
+          粤公网安备 4401XXXXXXXXXX号
+        </a>
+        -->
+      </footer>
     </el-main>
   </el-container>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Platform, Setting, SwitchButton } from '@element-plus/icons-vue'
 import { useUserStore } from './stores/user'
 import { userLogoutApi } from './api/user'
-import { ref, onMounted, onUnmounted } from 'vue'
 import { getLatestChangelogApi } from './api/changelog'
 
 const router = useRouter()
@@ -72,6 +101,7 @@ const logout = async () => {
     router.push('/login')
   }
 }
+
 const hasNewChangelog = ref(false)
 
 const checkChangelogBadge = async () => {
@@ -158,8 +188,36 @@ html, body, #app {
   height: calc(100vh - 60px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 32px;
+  padding: 20px 32px 0;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.main-content {
+  flex: 1;
+}
+.site-footer {
+  margin-top: 28px;
+  padding: 16px 0 20px;
+  border-top: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #909399;
+}
+.footer-divider {
+  margin: 0 10px;
+  color: #dcdfe6;
+}
+.beian-link {
+  color: #909399;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.beian-link:hover {
+  color: #409eff;
 }
 
 .nav-new-badge {
