@@ -3,6 +3,7 @@ package com.oj.backend.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
@@ -22,5 +23,6 @@ public class SubmitDTO {
 
     @NotBlank(message = "代码不能为空")
     @Schema(description = "源码正文")
+    @Size(max = 65535, message = "代码长度不能超过 64kB!")
     private String code;
 }
